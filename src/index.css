@@ -275,6 +275,8 @@ iframe[src*="cloudinary"] {
   overflow: hidden;
   background: hsl(var(--card));
   border-radius: var(--radius);
+  min-width: 0;
+  min-height: 0;
 }
 
 .dashboard-grid-card .drag-handle {
@@ -287,6 +289,7 @@ iframe[src*="cloudinary"] {
   transition: all 200ms ease;
   background: transparent;
   flex-shrink: 0;
+  min-height: 32px;
 }
 
 .dashboard-grid-card:hover .drag-handle {
@@ -299,33 +302,31 @@ iframe[src*="cloudinary"] {
   opacity: 1;
 }
 
-/* Scale card content to fit container */
-.dashboard-grid-card .card-content {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
+/* CardContent responsive scaling */
+.dashboard-grid-card [class*="CardContent"],
+.dashboard-grid-card > div > div {
+  container-type: size;
+  container-name: card;
 }
 
-.dashboard-grid-card .card-content > * {
-  flex-shrink: 0;
+/* Smooth transitions for all card elements */
+.dashboard-grid-card * {
+  transition: font-size 0.2s ease, padding 0.2s ease, margin 0.2s ease;
 }
 
-/* Responsive typography for different card sizes */
-.react-grid-item[style*="width"] .dashboard-grid-card {
-  font-size: clamp(0.75rem, 1.5vw, 1rem);
+/* React Grid Layout smooth resize */
+.react-grid-item {
+  transition: all 200ms ease;
 }
 
-.react-grid-item[style*="width"] .dashboard-grid-card h3 {
-  font-size: clamp(0.7rem, 1.3vw, 0.875rem);
+.react-grid-item.resizing {
+  transition: none;
+  z-index: 100;
 }
 
-.react-grid-item[style*="width"] .dashboard-grid-card p {
-  font-size: clamp(0.65rem, 1.2vw, 0.75rem);
-}
-
-.react-grid-item[style*="width"] .dashboard-grid-card .text-3xl {
-  font-size: clamp(1.25rem, 3vw, 1.875rem);
+.react-grid-item.react-draggable-dragging {
+  transition: none;
+  z-index: 100;
 }
 
 .react-grid-item[style*="width"] .dashboard-grid-card .w-12 {

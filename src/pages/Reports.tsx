@@ -608,13 +608,13 @@ export default function Reports() {
 // Default layout for the dashboard grid
 const defaultLayouts = {
   lg: [
-    { i: "risk-assessments", x: 0, y: 0, w: 3, h: 3, minW: 2, minH: 3, static: false },
-    { i: "safety-audits", x: 3, y: 0, w: 3, h: 3, minW: 2, minH: 3, static: false },
-    { i: "incidents", x: 6, y: 0, w: 3, h: 3, minW: 2, minH: 3, static: false },
-    { i: "training-compliance", x: 9, y: 0, w: 3, h: 3, minW: 2, minH: 3, static: false },
-    { i: "incident-trends", x: 0, y: 3, w: 12, h: 5, minW: 6, minH: 4, static: false },
-    { i: "audit-completion", x: 0, y: 8, w: 6, h: 5, minW: 4, minH: 4, static: false },
-    { i: "task-completion", x: 6, y: 8, w: 6, h: 5, minW: 4, minH: 4, static: false },
+    { i: "risk-assessments", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+    { i: "safety-audits", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+    { i: "incidents", x: 6, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+    { i: "training-compliance", x: 9, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+    { i: "incident-trends", x: 0, y: 2, w: 12, h: 5, minW: 4, minH: 3, static: false },
+    { i: "audit-completion", x: 0, y: 7, w: 6, h: 5, minW: 3, minH: 3, static: false },
+    { i: "task-completion", x: 6, y: 7, w: 6, h: 5, minW: 3, minH: 3, static: false },
   ],
   md: [
     { i: "risk-assessments", x: 0, y: 0, w: 5, h: 2, minW: 3, minH: 2, static: false },
@@ -1168,17 +1168,17 @@ function DraggableCard({
   color: string;
 }) {
   return (
-    <Card className="dashboard-grid-card border hover:border-primary/50 transition-colors shadow-sm">
-      <div className="drag-handle border-b">
+    <Card className="dashboard-grid-card border hover:border-primary/50 transition-colors shadow-sm h-full">
+      <div className="drag-handle border-b cursor-grab active:cursor-grabbing flex-shrink-0">
         <GripVertical className="w-4 h-4 text-muted-foreground" />
       </div>
-      <CardContent className="p-6 flex-1 flex flex-col justify-center">
-        <div className={`w-12 h-12 rounded-lg ${color} flex items-center justify-center mb-4`}>
+      <CardContent className="flex-1 flex flex-col items-center justify-center text-center p-4 overflow-hidden">
+        <div className={`w-10 h-10 rounded-lg ${color} flex items-center justify-center flex-shrink-0 mb-3`}>
           {icon}
         </div>
-        <h3 className="text-sm font-medium text-muted-foreground mb-1">{title}</h3>
-        <p className="text-xs text-muted-foreground mb-3">{subtitle}</p>
-        <p className="text-3xl font-bold">{value}</p>
+        <h3 className="font-medium text-foreground text-sm">{title}</h3>
+        <p className="text-muted-foreground text-xs mb-2">{subtitle}</p>
+        <p className="font-bold text-foreground text-2xl">{value}</p>
       </CardContent>
     </Card>
   );
@@ -1216,7 +1216,7 @@ function KPICard({
 function RiskAssessmentsSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
   const { toast } = useToast();
   const defaultLayout = [
-    { i: "risk-total", x: 0, y: 0, w: 4, h: 3, minW: 2, minH: 3, static: false },
+    { i: "risk-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
   ];
   
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
@@ -1288,8 +1288,8 @@ function RiskAssessmentsSection({ stats, chartData }: { stats: ReportStats; char
 function AuditsSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
   const { toast } = useToast();
   const defaultLayout = [
-    { i: "audit-total", x: 0, y: 0, w: 4, h: 3, minW: 2, minH: 3, static: false },
-    { i: "audit-completed", x: 4, y: 0, w: 4, h: 3, minW: 2, minH: 3, static: false },
+    { i: "audit-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+    { i: "audit-completed", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
   ];
   
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
@@ -1371,9 +1371,9 @@ function AuditsSection({ stats, chartData }: { stats: ReportStats; chartData: an
 function IncidentsSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
   const { toast } = useToast();
   const defaultLayout = [
-    { i: "incident-total", x: 0, y: 0, w: 4, h: 3, minW: 2, minH: 3, static: false },
-    { i: "incident-open", x: 4, y: 0, w: 4, h: 3, minW: 2, minH: 3, static: false },
-    { i: "incident-closed", x: 8, y: 0, w: 4, h: 3, minW: 2, minH: 3, static: false },
+    { i: "incident-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+    { i: "incident-open", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+    { i: "incident-closed", x: 6, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
   ];
   
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
@@ -1472,8 +1472,8 @@ function TrainingsSection({
 }) {
   const { toast } = useToast();
   const defaultLayout = [
-    { i: "training-total", x: 0, y: 0, w: 6, h: 3, minW: 2, minH: 3, static: false },
-    { i: "training-compliance", x: 6, y: 0, w: 6, h: 3, minW: 2, minH: 3, static: false },
+    { i: "training-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+    { i: "training-compliance", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
   ];
   
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
@@ -1621,9 +1621,9 @@ function TrainingsSection({
 function MeasuresSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
   const { toast } = useToast();
   const defaultLayout = [
-    { i: "measures-total", x: 0, y: 0, w: 4, h: 3, minW: 2, minH: 3, static: false },
-    { i: "measures-completed", x: 4, y: 0, w: 4, h: 3, minW: 2, minH: 3, static: false },
-    { i: "measures-progress", x: 8, y: 0, w: 4, h: 3, minW: 2, minH: 3, static: false },
+    { i: "measures-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+    { i: "measures-completed", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+    { i: "measures-progress", x: 6, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
   ];
   
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
@@ -1714,8 +1714,8 @@ function MeasuresSection({ stats, chartData }: { stats: ReportStats; chartData: 
 function TasksSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
   const { toast } = useToast();
   const defaultLayout = [
-    { i: "tasks-total", x: 0, y: 0, w: 6, h: 3, minW: 2, minH: 3, static: false },
-    { i: "tasks-completed", x: 6, y: 0, w: 6, h: 3, minW: 2, minH: 3, static: false },
+    { i: "tasks-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+    { i: "tasks-completed", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
   ];
   
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
@@ -1797,7 +1797,7 @@ function TasksSection({ stats, chartData }: { stats: ReportStats; chartData: any
 function CheckupsSection({ stats }: { stats: ReportStats }) {
   const { toast } = useToast();
   const defaultLayout = [
-    { i: "checkups-total", x: 0, y: 0, w: 12, h: 3, minW: 2, minH: 3, static: false },
+    { i: "checkups-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
   ];
   
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
