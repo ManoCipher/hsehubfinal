@@ -369,12 +369,12 @@ export default function Investigations() {
         .select("id")
         .eq("investigation_id", investigationId)
         .maybeSingle();
-      
+
       if (fetchError && fetchError.code !== "PGRST116") {
         console.error("Error checking existing health checkup:", fetchError);
         return;
       }
-      
+
       if (existing) {
         // Update existing health checkup
         console.log("Updating existing checkup:", existing.id);
@@ -382,7 +382,7 @@ export default function Investigations() {
           .from("health_checkups")
           .update(checkupData)
           .eq("id", existing.id);
-        
+
         if (updateError) {
           console.error("Error updating health checkup:", updateError);
           throw updateError;
@@ -397,7 +397,7 @@ export default function Investigations() {
           .insert(checkupData)
           .select()
           .single();
-        
+
         if (insertError) {
           console.error("Error creating health checkup:", insertError);
           throw insertError;
@@ -442,7 +442,7 @@ export default function Investigations() {
           .update(investigationData)
           .eq("id", editingInvestigation.id);
         if (error) throw error;
-        
+
         // Sync with health_checkups if employee is assigned
         if (investigationData.assigned_to_id) {
           try {
@@ -470,7 +470,7 @@ export default function Investigations() {
           .select()
           .single();
         if (error) throw error;
-        
+
         // Sync with health_checkups if employee is assigned
         if (investigationData.assigned_to_id && newInvestigation) {
           try {
@@ -542,7 +542,7 @@ export default function Investigations() {
 
   // Bulk delete handlers
   const handleSelectAll = () => {
-    const allIds = groupedByEmployee.flatMap(item => 
+    const allIds = groupedByEmployee.flatMap(item =>
       item.investigations.map(inv => inv.id)
     );
     if (selectedInvestigations.size === allIds.length) {
@@ -588,11 +588,11 @@ export default function Investigations() {
       fetchInvestigations();
     } catch (error: any) {
       console.error("Error deleting investigations:", error);
-      
+
       // Show detailed error message
       const errorMessage = error?.message || error?.details || error?.hint || "Failed to delete investigations";
       const errorDetails = error?.code ? ` (Error code: ${error.code})` : "";
-      
+
       toast({
         title: "Error",
         description: `${errorMessage}${errorDetails}`,
@@ -649,10 +649,10 @@ export default function Investigations() {
       fetchHealthCheckups();
     } catch (error: any) {
       console.error("Error deleting checkups:", error);
-      
+
       const errorMessage = error?.message || error?.details || error?.hint || "Failed to delete checkups";
       const errorDetails = error?.code ? ` (Error code: ${error.code})` : "";
-      
+
       toast({
         title: "Error",
         description: `${errorMessage}${errorDetails}`,
@@ -741,13 +741,31 @@ export default function Investigations() {
   // Group health checkups by employee for consistent Employee View (using healthCheckups data)
   const groupedByEmployeeFromCheckups = employees
     .map((employee) => {
-      const employeeCheckups = healthCheckups.filter(
-        (checkup: any) => checkup.employee_id === employee.id
-      );
+      const employeeCheckups = healthCheckups.filter((checkup: any) => {
+        const isForEmployee = checkup.employee_id === employee.id;
+        if (!isForEmployee) return false;
+
+        if (filterCheckUpType === "all") return true;
+
+        if (filterCheckUpType === "completed") {
+          return checkup.status === "done";
+        }
+
+        if (filterCheckUpType === "planned") {
+          return checkup.status === "open" || checkup.status === "planned";
+        }
+
+        return checkup.status === filterCheckUpType;
+      });
+
       return {
         employee,
         checkups: employeeCheckups,
-        investigationNames: [...new Set(employeeCheckups.map((c: any) => c.investigation_name).filter(Boolean))].join(", "),
+        investigationNames: [
+          ...new Set(
+            employeeCheckups.map((c: any) => c.investigation_name).filter(Boolean)
+          ),
+        ].join(", "),
       };
     })
     .filter((item) => {
@@ -762,17 +780,22 @@ export default function Investigations() {
 
       const matchesSearch =
         !searchTerm ||
-        item.employee.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.employee.employee_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.investigationNames?.toLowerCase().includes(searchTerm.toLowerCase());
+        item.employee.full_name
+          ?.toLowerCase()
+          .includes(searchTerm.toLowerCase()) ||
+        item.employee.employee_number
+          ?.toLowerCase()
+          .includes(searchTerm.toLowerCase()) ||
+        item.investigationNames
+          ?.toLowerCase()
+          .includes(searchTerm.toLowerCase());
 
-      const matchesStatus = filterCheckUpType === "all" || item.checkups.some((c: any) => 
-        c.status === filterCheckUpType ||
-        (filterCheckUpType === "completed" && c.status === "done") ||
-        (filterCheckUpType === "planned" && (c.status === "open" || c.status === "planned"))
+      return (
+        item.checkups.length > 0 &&
+        matchesDepartment &&
+        matchesGroup &&
+        matchesSearch
       );
-
-      return item.checkups.length > 0 && matchesDepartment && matchesGroup && matchesSearch && matchesStatus;
     });
 
   const exportToPDF = () => {
@@ -1240,65 +1263,64 @@ export default function Investigations() {
                     </TableRow>
                   ) : (
                     groupedByEmployeeFromCheckups.map((item) => {
-                        const nameParts = item.employee.full_name.split(" ");
-                        const lastName = nameParts[nameParts.length - 1];
-                        const firstName = nameParts.slice(0, -1).join(" ");
+                      const nameParts = item.employee.full_name.split(" ");
+                      const lastName = nameParts[nameParts.length - 1];
+                      const firstName = nameParts.slice(0, -1).join(" ");
 
-                        return (
-                          <TableRow key={item.employee.id}>
+                      return (
+                        <TableRow key={item.employee.id}>
 
-                            <TableCell className="font-medium">
-                              {lastName}
-                            </TableCell>
-                            <TableCell>{firstName}</TableCell>
-                            <TableCell>
-                              {item.employee.departments?.name || "—"}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-wrap gap-1">
-                                {item.checkups.map((checkup: any) => (
-                                  <Badge
-                                    key={checkup.id}
-                                    variant="outline"
-                                    className="text-xs"
-                                  >
-                                    {checkup.investigation_name || "—"}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-wrap gap-1">
-                                {item.checkups.map((checkup: any) => (
-                                  <Badge
-                                    key={checkup.id}
-                                    className={`text-xs ${
-                                      checkup.status === "done" ? "bg-green-500" :
+                          <TableCell className="font-medium">
+                            {lastName}
+                          </TableCell>
+                          <TableCell>{firstName}</TableCell>
+                          <TableCell>
+                            {item.employee.departments?.name || "—"}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {item.checkups.map((checkup: any) => (
+                                <Badge
+                                  key={checkup.id}
+                                  variant="outline"
+                                  className="text-xs"
+                                >
+                                  {checkup.investigation_name || "—"}
+                                </Badge>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {item.checkups.map((checkup: any) => (
+                                <Badge
+                                  key={checkup.id}
+                                  className={`text-xs ${checkup.status === "done" ? "bg-green-500" :
                                       checkup.status === "planned" ? "bg-blue-500" : ""
                                     }`}
-                                    variant={checkup.status === "open" ? "outline" : "default"}
-                                  >
-                                    {checkup.status === "done" ? "Done" : 
-                                     checkup.status === "planned" ? "Planned" : "Open"}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() =>
-                                  navigate(`/employees/${item.employee.id}`)
-                                }
-                              >
-                                <Edit className="w-4 h-4 mr-1" />
-                                {t("common.edit")}
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
+                                  variant={checkup.status === "open" ? "outline" : "default"}
+                                >
+                                  {checkup.status === "done" ? "Done" :
+                                    checkup.status === "planned" ? "Planned" : "Open"}
+                                </Badge>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                navigate(`/employees/${item.employee.id}`)
+                              }
+                            >
+                              <Edit className="w-4 h-4 mr-1" />
+                              {t("common.edit")}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
@@ -1320,12 +1342,12 @@ export default function Investigations() {
                 </TableHeader>
                 <TableBody>
                   {healthCheckups.filter((checkup: any) => {
-                    const matchesSearch = !searchTerm || 
+                    const matchesSearch = !searchTerm ||
                       checkup.employee?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                       checkup.investigation_name?.toLowerCase().includes(searchTerm.toLowerCase());
                     const matchesDepartment = filterDepartment === "all" || checkup.employee?.departments?.name === filterDepartment;
                     const matchesGroup = filterGroup === "all" || checkup.employee?.exposure_groups?.name === filterGroup;
-                    const matchesStatus = filterCheckUpType === "all" || 
+                    const matchesStatus = filterCheckUpType === "all" ||
                       checkup.status === filterCheckUpType ||
                       (filterCheckUpType === "completed" && checkup.status === "done") ||
                       (filterCheckUpType === "planned" && (checkup.status === "open" || checkup.status === "planned"));
@@ -1342,68 +1364,67 @@ export default function Investigations() {
                   ) : (
                     healthCheckups
                       .filter((checkup: any) => {
-                        const matchesSearch = !searchTerm || 
+                        const matchesSearch = !searchTerm ||
                           checkup.employee?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           checkup.investigation_name?.toLowerCase().includes(searchTerm.toLowerCase());
                         const matchesDepartment = filterDepartment === "all" || checkup.employee?.departments?.name === filterDepartment;
                         const matchesGroup = filterGroup === "all" || checkup.employee?.exposure_groups?.name === filterGroup;
-                        const matchesStatus = filterCheckUpType === "all" || 
+                        const matchesStatus = filterCheckUpType === "all" ||
                           checkup.status === filterCheckUpType ||
                           (filterCheckUpType === "completed" && checkup.status === "done") ||
                           (filterCheckUpType === "planned" && (checkup.status === "open" || checkup.status === "planned"));
                         return matchesSearch && matchesDepartment && matchesGroup && matchesStatus;
                       })
                       .map((checkup: any) => (
-                      <TableRow key={checkup.id}>
+                        <TableRow key={checkup.id}>
 
-                        <TableCell className="font-medium">
-                          {checkup.employee?.full_name || "—"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {checkup.investigation_name || "—"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {checkup.due_date
-                            ? format(
+                          <TableCell className="font-medium">
+                            {checkup.employee?.full_name || "—"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">
+                              {checkup.investigation_name || "—"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {checkup.due_date
+                              ? format(
                                 new Date(checkup.due_date),
                                 "dd.MM.yyyy"
                               )
-                            : "—"}
-                        </TableCell>
-                        <TableCell>
-                          {checkup.appointment_date
-                            ? format(
+                              : "—"}
+                          </TableCell>
+                          <TableCell>
+                            {checkup.appointment_date
+                              ? format(
                                 new Date(checkup.appointment_date),
                                 "dd.MM.yyyy"
                               )
-                            : "—"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            className={`text-xs ${
-                              checkup.status === "done" ? "bg-green-500" :
-                              checkup.status === "planned" ? "bg-blue-500" : ""
-                            }`}
-                            variant={checkup.status === "open" ? "outline" : "default"}
-                          >
-                            {checkup.status === "done" ? "Done" : 
-                             checkup.status === "planned" ? "Planned" : "Open"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => navigate(`/employees/${checkup.employee_id}`)}
-                          >
-                            <Edit className="w-4 h-4 mr-1" />
-                            View Profile
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                              : "—"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              className={`text-xs ${checkup.status === "done" ? "bg-green-500" :
+                                  checkup.status === "planned" ? "bg-blue-500" : ""
+                                }`}
+                              variant={checkup.status === "open" ? "outline" : "default"}
+                            >
+                              {checkup.status === "done" ? "Done" :
+                                checkup.status === "planned" ? "Planned" : "Open"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => navigate(`/employees/${checkup.employee_id}`)}
+                            >
+                              <Edit className="w-4 h-4 mr-1" />
+                              View Profile
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
                   )}
                 </TableBody>
               </Table>
@@ -1452,12 +1473,12 @@ export default function Investigations() {
                         const matchesDepartment =
                           filterDepartment === "all" ||
                           checkup.employee?.departments?.name ===
-                            filterDepartment;
+                          filterDepartment;
 
                         const matchesGroup =
                           filterGroup === "all" ||
                           checkup.employee?.exposure_groups?.name ===
-                            filterGroup;
+                          filterGroup;
 
                         const matchesStatus =
                           filterCheckUpType === "all" ||
@@ -1511,9 +1532,9 @@ export default function Investigations() {
                             <TableCell>
                               {checkup.appointment_date
                                 ? format(
-                                    new Date(checkup.appointment_date),
-                                    "dd.MM.yyyy"
-                                  )
+                                  new Date(checkup.appointment_date),
+                                  "dd.MM.yyyy"
+                                )
                                 : "—"}
                             </TableCell>
                             <TableCell>
