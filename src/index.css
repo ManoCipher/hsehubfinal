@@ -299,6 +299,40 @@ iframe[src*="cloudinary"] {
   opacity: 1;
 }
 
+/* Scale card content to fit container */
+.dashboard-grid-card .card-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.dashboard-grid-card .card-content > * {
+  flex-shrink: 0;
+}
+
+/* Responsive typography for different card sizes */
+.react-grid-item[style*="width"] .dashboard-grid-card {
+  font-size: clamp(0.75rem, 1.5vw, 1rem);
+}
+
+.react-grid-item[style*="width"] .dashboard-grid-card h3 {
+  font-size: clamp(0.7rem, 1.3vw, 0.875rem);
+}
+
+.react-grid-item[style*="width"] .dashboard-grid-card p {
+  font-size: clamp(0.65rem, 1.2vw, 0.75rem);
+}
+
+.react-grid-item[style*="width"] .dashboard-grid-card .text-3xl {
+  font-size: clamp(1.25rem, 3vw, 1.875rem);
+}
+
+.react-grid-item[style*="width"] .dashboard-grid-card .w-12 {
+  width: clamp(2rem, 4vw, 3rem);
+  height: clamp(2rem, 4vw, 3rem);
+}
+
 /* Ensure grid items don't overflow */
 .react-grid-item {
   overflow: visible;
