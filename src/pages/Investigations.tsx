@@ -752,7 +752,11 @@ export default function Investigations() {
         }
 
         if (filterCheckUpType === "planned") {
-          return checkup.status === "open" || checkup.status === "planned";
+          return checkup.status === "planned";
+        }
+
+        if (filterCheckUpType === "open") {
+          return checkup.status === "open";
         }
 
         return checkup.status === filterCheckUpType;
@@ -821,8 +825,8 @@ export default function Investigations() {
       autoTable(doc, {
         head: [
           [
-            t("common.lastName"),
             t("common.firstName"),
+            t("common.lastName"),
             t("common.department"),
             t("common.group"),
             t("investigations.gCode"),
@@ -1177,7 +1181,7 @@ export default function Investigations() {
                 <SelectItem value="planned">
                   {t("investigations.planned")}
                 </SelectItem>
-                <SelectItem value="due">{t("dashboard.dueStatus")}</SelectItem>
+                <SelectItem value="open">{t("investigations.open")}</SelectItem>
                 <SelectItem value="completed">
                   {t("investigations.completed")}
                 </SelectItem>
@@ -1241,8 +1245,8 @@ export default function Investigations() {
                 <TableHeader>
                   <TableRow>
 
-                    <TableHead>{t("common.lastName")}</TableHead>
                     <TableHead>{t("common.firstName")}</TableHead>
+                    <TableHead>{t("common.lastName")}</TableHead>
                     <TableHead>{t("common.department")}</TableHead>
                     <TableHead>{t("investigations.gCode")}</TableHead>
                     <TableHead>{t("common.status")}</TableHead>
@@ -1271,22 +1275,21 @@ export default function Investigations() {
                         <TableRow key={item.employee.id}>
 
                           <TableCell className="font-medium">
-                            {lastName}
+                            {firstName}
                           </TableCell>
-                          <TableCell>{firstName}</TableCell>
+                          <TableCell>{lastName}</TableCell>
                           <TableCell>
                             {item.employee.departments?.name || "—"}
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-1">
                               {item.checkups.map((checkup: any) => (
-                                <Badge
+                                <span
                                   key={checkup.id}
-                                  variant="outline"
                                   className="text-xs"
                                 >
                                   {checkup.investigation_name || "—"}
-                                </Badge>
+                                </span>
                               ))}
                             </div>
                           </TableCell>
@@ -1350,7 +1353,8 @@ export default function Investigations() {
                     const matchesStatus = filterCheckUpType === "all" ||
                       checkup.status === filterCheckUpType ||
                       (filterCheckUpType === "completed" && checkup.status === "done") ||
-                      (filterCheckUpType === "planned" && (checkup.status === "open" || checkup.status === "planned"));
+                      (filterCheckUpType === "planned" && checkup.status === "planned") ||
+                      (filterCheckUpType === "open" && checkup.status === "open");
                     return matchesSearch && matchesDepartment && matchesGroup && matchesStatus;
                   }).length === 0 ? (
                     <TableRow>
@@ -1372,7 +1376,8 @@ export default function Investigations() {
                         const matchesStatus = filterCheckUpType === "all" ||
                           checkup.status === filterCheckUpType ||
                           (filterCheckUpType === "completed" && checkup.status === "done") ||
-                          (filterCheckUpType === "planned" && (checkup.status === "open" || checkup.status === "planned"));
+                          (filterCheckUpType === "planned" && checkup.status === "planned") ||
+                          (filterCheckUpType === "open" && checkup.status === "open");
                         return matchesSearch && matchesDepartment && matchesGroup && matchesStatus;
                       })
                       .map((checkup: any) => (
@@ -1382,9 +1387,7 @@ export default function Investigations() {
                             {checkup.employee?.full_name || "—"}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">
-                              {checkup.investigation_name || "—"}
-                            </Badge>
+                            {checkup.investigation_name || "—"}
                           </TableCell>
                           <TableCell>
                             {checkup.due_date
@@ -1486,8 +1489,9 @@ export default function Investigations() {
                           (filterCheckUpType === "completed" &&
                             checkup.status === "done") ||
                           (filterCheckUpType === "planned" &&
-                            (checkup.status === "open" ||
-                              checkup.status === "planned"));
+                            checkup.status === "planned") ||
+                          (filterCheckUpType === "open" &&
+                            checkup.status === "open");
 
                         return (
                           matchesSearch &&
@@ -1522,9 +1526,7 @@ export default function Investigations() {
                               {checkup.employee?.employee_number || "—"}
                             </TableCell>
                             <TableCell>
-                              <Badge variant="outline">
-                                {checkup.investigation_name || "—"}
-                              </Badge>
+                              {checkup.investigation_name || "—"}
                             </TableCell>
                             <TableCell>
                               {checkup.employee?.departments?.name || "—"}
