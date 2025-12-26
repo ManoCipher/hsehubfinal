@@ -755,6 +755,10 @@ export default function Investigations() {
           return checkup.status === "planned";
         }
 
+        if (filterCheckUpType === "open") {
+          return checkup.status === "open";
+        }
+
         return checkup.status === filterCheckUpType;
       });
 
@@ -1177,7 +1181,7 @@ export default function Investigations() {
                 <SelectItem value="planned">
                   {t("investigations.planned")}
                 </SelectItem>
-                <SelectItem value="due">{t("dashboard.dueStatus")}</SelectItem>
+                <SelectItem value="open">{t("investigations.open")}</SelectItem>
                 <SelectItem value="completed">
                   {t("investigations.completed")}
                 </SelectItem>
@@ -1349,7 +1353,8 @@ export default function Investigations() {
                     const matchesStatus = filterCheckUpType === "all" ||
                       checkup.status === filterCheckUpType ||
                       (filterCheckUpType === "completed" && checkup.status === "done") ||
-                      (filterCheckUpType === "planned" && checkup.status === "planned");
+                      (filterCheckUpType === "planned" && checkup.status === "planned") ||
+                      (filterCheckUpType === "open" && checkup.status === "open");
                     return matchesSearch && matchesDepartment && matchesGroup && matchesStatus;
                   }).length === 0 ? (
                     <TableRow>
@@ -1371,7 +1376,8 @@ export default function Investigations() {
                         const matchesStatus = filterCheckUpType === "all" ||
                           checkup.status === filterCheckUpType ||
                           (filterCheckUpType === "completed" && checkup.status === "done") ||
-                          (filterCheckUpType === "planned" && checkup.status === "planned");
+                          (filterCheckUpType === "planned" && checkup.status === "planned") ||
+                          (filterCheckUpType === "open" && checkup.status === "open");
                         return matchesSearch && matchesDepartment && matchesGroup && matchesStatus;
                       })
                       .map((checkup: any) => (
@@ -1483,7 +1489,9 @@ export default function Investigations() {
                           (filterCheckUpType === "completed" &&
                             checkup.status === "done") ||
                           (filterCheckUpType === "planned" &&
-                            checkup.status === "planned");
+                            checkup.status === "planned") ||
+                          (filterCheckUpType === "open" &&
+                            checkup.status === "open");
 
                         return (
                           matchesSearch &&
