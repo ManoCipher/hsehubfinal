@@ -1483,7 +1483,7 @@ export default function EmployeeProfile() {
         employee_id: id,
         company_id: companyId,
         investigation_name: investigationName, // Store full G-investigation name
-        appointment_date: checkupFormData.appointment_date,
+        appointment_date: checkupFormData.appointment_date || null,
         status: checkupFormData.status,
         notes: checkupFormData.notes,
       };
@@ -3610,7 +3610,7 @@ export default function EmployeeProfile() {
                   {/* Date Fields - Row Layout */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label>Appointment Date</Label>
+                      <Label>Appointment Date (optional)</Label>
                       <Input
                         type="date"
                         value={checkupFormData.appointment_date}
@@ -3719,7 +3719,7 @@ export default function EmployeeProfile() {
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
-                    <Label>Appointment Date *</Label>
+                    <Label>Appointment Date (optional)</Label>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button
