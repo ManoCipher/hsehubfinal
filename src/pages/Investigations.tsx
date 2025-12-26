@@ -878,21 +878,6 @@ export default function Investigations() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              {(selectedInvestigations.size > 0 || selectedCheckups.size > 0) && (
-                <Button
-                  variant="destructive"
-                  onClick={viewMode === "checkup" ? handleBulkDeleteCheckups : handleBulkDelete}
-                  disabled={isDeleting}
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  {isDeleting 
-                    ? 'Deleting...' 
-                    : viewMode === "checkup" 
-                      ? `Delete (${selectedCheckups.size})`
-                      : `Delete (${selectedInvestigations.size})`
-                  }
-                </Button>
-              )}
               <Button variant="outline" onClick={exportToPDF}>
                 <FileDown className="w-4 h-4 mr-2" />
                 {t("investigations.exportPDF")}
@@ -1232,21 +1217,7 @@ export default function Investigations() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12">
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 cursor-pointer"
-                        checked={groupedByEmployeeFromCheckups.length > 0 && selectedCheckups.size === groupedByEmployeeFromCheckups.flatMap(item => item.checkups).length}
-                        onChange={() => {
-                          const allIds = groupedByEmployeeFromCheckups.flatMap(item => item.checkups.map((c: any) => c.id));
-                          if (selectedCheckups.size === allIds.length) {
-                            setSelectedCheckups(new Set());
-                          } else {
-                            setSelectedCheckups(new Set(allIds));
-                          }
-                        }}
-                      />
-                    </TableHead>
+
                     <TableHead>{t("common.lastName")}</TableHead>
                     <TableHead>{t("common.firstName")}</TableHead>
                     <TableHead>{t("common.department")}</TableHead>
@@ -1261,7 +1232,7 @@ export default function Investigations() {
                   {groupedByEmployeeFromCheckups.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={7}
+                        colSpan={6}
                         className="text-center py-8 text-muted-foreground"
                       >
                         {t("investigations.noInvestigations")}
@@ -1275,19 +1246,7 @@ export default function Investigations() {
 
                         return (
                           <TableRow key={item.employee.id}>
-                            <TableCell>
-                              <div className="flex flex-col gap-1">
-                                {item.checkups.map((checkup: any) => (
-                                  <input
-                                    key={checkup.id}
-                                    type="checkbox"
-                                    className="w-4 h-4 cursor-pointer"
-                                    checked={selectedCheckups.has(checkup.id)}
-                                    onChange={() => handleSelectCheckup(checkup.id)}
-                                  />
-                                ))}
-                              </div>
-                            </TableCell>
+
                             <TableCell className="font-medium">
                               {lastName}
                             </TableCell>
@@ -1348,44 +1307,7 @@ export default function Investigations() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12">
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 cursor-pointer"
-                        checked={healthCheckups.length > 0 && selectedCheckups.size === healthCheckups.filter((c: any) => {
-                          const matchesSearch = !searchTerm || 
-                            c.employee?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            c.investigation_name?.toLowerCase().includes(searchTerm.toLowerCase());
-                          const matchesDepartment = filterDepartment === "all" || c.employee?.departments?.name === filterDepartment;
-                          const matchesGroup = filterGroup === "all" || c.employee?.exposure_groups?.name === filterGroup;
-                          const matchesStatus = filterCheckUpType === "all" || 
-                            c.status === filterCheckUpType ||
-                            (filterCheckUpType === "completed" && c.status === "done") ||
-                            (filterCheckUpType === "planned" && (c.status === "open" || c.status === "planned"));
-                          return matchesSearch && matchesDepartment && matchesGroup && matchesStatus;
-                        }).length}
-                        onChange={() => {
-                          const filteredCheckups = healthCheckups.filter((c: any) => {
-                            const matchesSearch = !searchTerm || 
-                              c.employee?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                              c.investigation_name?.toLowerCase().includes(searchTerm.toLowerCase());
-                            const matchesDepartment = filterDepartment === "all" || c.employee?.departments?.name === filterDepartment;
-                            const matchesGroup = filterGroup === "all" || c.employee?.exposure_groups?.name === filterGroup;
-                            const matchesStatus = filterCheckUpType === "all" || 
-                              c.status === filterCheckUpType ||
-                              (filterCheckUpType === "completed" && c.status === "done") ||
-                              (filterCheckUpType === "planned" && (c.status === "open" || c.status === "planned"));
-                            return matchesSearch && matchesDepartment && matchesGroup && matchesStatus;
-                          });
-                          const allIds = filteredCheckups.map((c: any) => c.id);
-                          if (selectedCheckups.size === allIds.length) {
-                            setSelectedCheckups(new Set());
-                          } else {
-                            setSelectedCheckups(new Set(allIds));
-                          }
-                        }}
-                      />
-                    </TableHead>
+
                     <TableHead>{t("common.employee")}</TableHead>
                     <TableHead>{t("investigations.gCode")}</TableHead>
                     <TableHead>Due Date</TableHead>
@@ -1411,7 +1333,7 @@ export default function Investigations() {
                   }).length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={7}
+                        colSpan={6}
                         className="text-center py-8 text-muted-foreground"
                       >
                         {t("investigations.noInvestigations")}
@@ -1433,14 +1355,7 @@ export default function Investigations() {
                       })
                       .map((checkup: any) => (
                       <TableRow key={checkup.id}>
-                        <TableCell>
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4 cursor-pointer"
-                            checked={selectedCheckups.has(checkup.id)}
-                            onChange={() => handleSelectCheckup(checkup.id)}
-                          />
-                        </TableCell>
+
                         <TableCell className="font-medium">
                           {checkup.employee?.full_name || "—"}
                         </TableCell>
@@ -1497,14 +1412,7 @@ export default function Investigations() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12">
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 cursor-pointer"
-                        checked={healthCheckups.length > 0 && selectedCheckups.size === healthCheckups.length}
-                        onChange={handleSelectAllCheckups}
-                      />
-                    </TableHead>
+
                     <TableHead>{t("common.employee")}</TableHead>
                     <TableHead>Employee Number</TableHead>
                     <TableHead>Investigation Name</TableHead>
@@ -1521,7 +1429,7 @@ export default function Investigations() {
                   {healthCheckups.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={9}
+                        colSpan={8}
                         className="text-center py-8 text-muted-foreground"
                       >
                         No health checkups found
@@ -1585,14 +1493,7 @@ export default function Investigations() {
 
                         return (
                           <TableRow key={checkup.id}>
-                            <TableCell>
-                              <input
-                                type="checkbox"
-                                className="w-4 h-4 cursor-pointer"
-                                checked={selectedCheckups.has(checkup.id)}
-                                onChange={() => handleSelectCheckup(checkup.id)}
-                              />
-                            </TableCell>
+
                             <TableCell className="font-medium">
                               {checkup.employee?.full_name || "—"}
                             </TableCell>
