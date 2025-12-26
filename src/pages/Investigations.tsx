@@ -1026,7 +1026,7 @@ export default function Investigations() {
                       </div>
                       <div>
                         <Label htmlFor="appointment_date">
-                          {t("investigations.appointmentDate")}
+                          {t("investigations.appointmentDate")} (optional)
                         </Label>
                         <Input
                           id="appointment_date"
