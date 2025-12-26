@@ -608,13 +608,13 @@ export default function Reports() {
 // Default layout for the dashboard grid
 const defaultLayouts = {
   lg: [
-    { i: "risk-assessments", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-    { i: "safety-audits", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-    { i: "incidents", x: 6, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-    { i: "training-compliance", x: 9, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-    { i: "incident-trends", x: 0, y: 2, w: 12, h: 5, minW: 4, minH: 3, static: false },
-    { i: "audit-completion", x: 0, y: 7, w: 6, h: 5, minW: 3, minH: 3, static: false },
-    { i: "task-completion", x: 6, y: 7, w: 6, h: 5, minW: 3, minH: 3, static: false },
+    { i: "risk-assessments", x: 0, y: 0, w: 3, h: 3, minW: 2, minH: 2, static: false },
+    { i: "safety-audits", x: 3, y: 0, w: 3, h: 3, minW: 2, minH: 2, static: false },
+    { i: "incidents", x: 6, y: 0, w: 3, h: 3, minW: 2, minH: 2, static: false },
+    { i: "training-compliance", x: 9, y: 0, w: 3, h: 3, minW: 2, minH: 2, static: false },
+    { i: "incident-trends", x: 0, y: 3, w: 12, h: 6, minW: 6, minH: 4, static: false },
+    { i: "audit-completion", x: 0, y: 9, w: 6, h: 6, minW: 4, minH: 4, static: false },
+    { i: "task-completion", x: 6, y: 9, w: 6, h: 6, minW: 4, minH: 4, static: false },
   ],
   md: [
     { i: "risk-assessments", x: 0, y: 0, w: 5, h: 2, minW: 3, minH: 2, static: false },
@@ -814,11 +814,11 @@ function OverviewSection({
             <div className="drag-handle border-b">
               <GripVertical className="w-4 h-4 text-muted-foreground" />
             </div>
-            <CardHeader className="py-3">
-              <CardTitle>Incident Trends</CardTitle>
+            <CardHeader className="py-4 pb-3">
+              <CardTitle className="text-lg">Incident Trends</CardTitle>
               <CardDescription>Monthly incident reports over the last 6 months</CardDescription>
             </CardHeader>
-            <CardContent className="flex-1 pb-4">
+            <CardContent className="flex-1 pb-4 pt-0">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData}>
                   <defs>
@@ -851,24 +851,24 @@ function OverviewSection({
             <div className="drag-handle border-b">
               <GripVertical className="w-4 h-4 text-muted-foreground" />
             </div>
-            <CardHeader className="py-3">
-              <CardTitle>Audit Completion</CardTitle>
+            <CardHeader className="py-4 pb-3">
+              <CardTitle className="text-lg">Audit Completion</CardTitle>
               <CardDescription>Safety audit metrics</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pb-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Total Audits</span>
-                <Badge>{stats.totalAudits}</Badge>
+                <Badge className="text-sm px-2.5 py-0.5">{stats.totalAudits}</Badge>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Completed</span>
-                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-sm px-2.5 py-0.5">
                   {stats.completedAudits}
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Completion Rate</span>
-                <span className="text-lg font-bold">
+                <span className="text-xl font-bold">
                   {stats.totalAudits > 0
                     ? Math.round((stats.completedAudits / stats.totalAudits) * 100)
                     : 0}
@@ -881,7 +881,7 @@ function OverviewSection({
                     ? (stats.completedAudits / stats.totalAudits) * 100
                     : 0
                 }
-                className="h-2"
+                className="h-2.5 mt-2"
               />
             </CardContent>
           </Card>
@@ -893,24 +893,24 @@ function OverviewSection({
             <div className="drag-handle border-b">
               <GripVertical className="w-4 h-4 text-muted-foreground" />
             </div>
-            <CardHeader className="py-3">
-              <CardTitle>Task Completion</CardTitle>
+            <CardHeader className="py-4 pb-3">
+              <CardTitle className="text-lg">Task Completion</CardTitle>
               <CardDescription>Corrective action tracking</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pb-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Total Tasks</span>
-                <Badge>{stats.totalTasks}</Badge>
+                <Badge className="text-sm px-2.5 py-0.5">{stats.totalTasks}</Badge>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Completed</span>
-                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-sm px-2.5 py-0.5">
                   {stats.completedTasks}
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Completion Rate</span>
-                <span className="text-lg font-bold">
+                <span className="text-xl font-bold">
                   {stats.totalTasks > 0
                     ? Math.round((stats.completedTasks / stats.totalTasks) * 100)
                     : 0}
@@ -923,7 +923,7 @@ function OverviewSection({
                     ? (stats.completedTasks / stats.totalTasks) * 100
                     : 0
                 }
-                className="h-2"
+                className="h-2.5 mt-2"
               />
             </CardContent>
           </Card>
