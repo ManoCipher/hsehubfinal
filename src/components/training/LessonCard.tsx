@@ -73,7 +73,7 @@ export default function LessonCard({
       case "iframe":
         return "iFrame";
       case "subchapter":
-        return "Unterkapitel";
+        return "Subchapter";
       default:
         return type;
     }
@@ -135,12 +135,12 @@ export default function LessonCard({
               {lesson.status === "draft" ? (
                 <>
                   <Circle className="w-3 h-3 mr-1" />
-                  Entwurf
+                  Draft
                 </>
               ) : (
                 <>
                   <CheckCircle2 className="w-3 h-3 mr-1" />
-                  Veröffentlicht
+                  Published
                 </>
               )}
             </Badge>
@@ -178,11 +178,11 @@ export default function LessonCard({
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={handleEdit}>
               <Edit className="w-4 h-4 mr-2" />
-              Bearbeiten
+              Edit
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onDuplicate(lesson.id)}>
               <Copy className="w-4 h-4 mr-2" />
-              Duplizieren
+              Duplicate
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => onToggleStatus(lesson.id, lesson.status)}
@@ -190,12 +190,12 @@ export default function LessonCard({
               {lesson.status === "draft" ? (
                 <>
                   <CheckCircle2 className="w-4 h-4 mr-2" />
-                  Veröffentlichen
+                  Publish
                 </>
               ) : (
                 <>
                   <Circle className="w-4 h-4 mr-2" />
-                  Als Entwurf
+                  Set as Draft
                 </>
               )}
             </DropdownMenuItem>
@@ -204,7 +204,7 @@ export default function LessonCard({
               className="text-destructive"
             >
               <Trash2 className="w-4 h-4 mr-2" />
-              Löschen
+              Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

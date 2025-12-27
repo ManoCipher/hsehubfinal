@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   Plus,
@@ -74,6 +74,7 @@ interface Lesson {
 }
 
 export default function Training() {
+  const { courseId: urlCourseId } = useParams<{ courseId?: string }>();
   const { user, loading, companyId } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
@@ -102,6 +103,21 @@ export default function Training() {
       fetchCourses();
     }
   }, [user, loading, navigate, companyId]);
+
+  // Auto-select course from URL if provided, or clear selection if no courseId
+  useEffect(() => {
+    if (urlCourseId && courses.length > 0) {
+      const course = courses.find(c => c.id === urlCourseId);
+      if (course && selectedCourse?.id !== urlCourseId) {
+        setSelectedCourse(course);
+        fetchLessons(urlCourseId);
+      }
+    } else if (!urlCourseId && selectedCourse) {
+      // Clear selection when navigating back to main course list
+      setSelectedCourse(null);
+      setLessons([]);
+    }
+  }, [urlCourseId, courses]);
 
   const fetchCourses = async () => {
     if (!companyId) return;
@@ -359,7 +375,7 @@ export default function Training() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setSelectedCourse(null)}
+                onClick={() => navigate("/training")}
               >
                 <ArrowLeft className="w-5 h-5" />
               </Button>
@@ -559,10 +575,7 @@ export default function Training() {
                   >
                     {/* Course Card Content */}
                     <div
-                      onClick={() => {
-                        setSelectedCourse(course);
-                        fetchLessons(course.id);
-                      }}
+                      onClick={() => navigate(`/training/${course.id}`)}
                       className="cursor-pointer"
                     >
                       <div className="w-full h-24 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
@@ -575,10 +588,7 @@ export default function Training() {
                       <div className="flex-1">
                         <h3
                           className="font-semibold text-lg mb-2 cursor-pointer"
-                          onClick={() => {
-                            setSelectedCourse(course);
-                            fetchLessons(course.id);
-                          }}
+                          onClick={() => navigate(`/training/${course.id}`)}
                         >
                           {course.name}
                         </h3>

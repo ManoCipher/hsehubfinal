@@ -160,6 +160,14 @@ const App = () => (
                 }
               />
               <Route
+                path="/training/:courseId"
+                element={
+                  <MainLayout>
+                    <Training />
+                  </MainLayout>
+                }
+              />
+              <Route
                 path="/training/:courseId/lesson/:lessonId"
                 element={
                   <MainLayout>

@@ -161,14 +161,14 @@ export default function LessonViewer() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate("/training")}
+              onClick={() => navigate(`/training/${courseId}`)}
             >
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <span
                 className="hover:text-foreground cursor-pointer"
-                onClick={() => navigate("/training")}
+                onClick={() => navigate(`/training/${courseId}`)}
               >
                 {course?.name || "Course"}
               </span>
@@ -234,67 +234,68 @@ export default function LessonViewer() {
           <CardContent>
             {/* Video/Audio Content */}
             {lesson.type === "video_audio" && lesson.content_url && (
-              <div className="aspect-video bg-black rounded-lg overflow-hidden">
-                <video
-                  src={lesson.content_url}
-                  controls
-                  className="w-full h-full"
-                >
-                  Your browser does not support the video tag.
-                </video>
+              <div className="w-full">
+                {/* Check if it's a YouTube or Vimeo link */}
+                {(lesson.content_url.includes('youtube.com') || 
+                  lesson.content_url.includes('youtu.be') || 
+                  lesson.content_url.includes('vimeo.com')) ? (
+                  <div className="aspect-video bg-black rounded-lg overflow-hidden">
+                    <iframe
+                      src={
+                        lesson.content_url.includes('youtube.com') 
+                          ? lesson.content_url.replace('watch?v=', 'embed/')
+                          : lesson.content_url.includes('youtu.be')
+                          ? lesson.content_url.replace('youtu.be/', 'youtube.com/embed/')
+                          : lesson.content_url.includes('vimeo.com')
+                          ? lesson.content_url.replace('vimeo.com/', 'player.vimeo.com/video/')
+                          : lesson.content_url
+                      }
+                      className="w-full h-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      title={lesson.name}
+                    />
+                  </div>
+                ) : (
+                  <div className="aspect-video bg-black rounded-lg overflow-hidden">
+                    <video
+                      src={lesson.content_url}
+                      controls
+                      className="w-full h-full"
+                    >
+                      Your browser does not support the video tag.
+                    </video>
+                  </div>
+                )}
               </div>
             )}
 
             {/* PDF Content */}
             {lesson.type === "pdf" && lesson.content_url && (
-              <div className="flex flex-col items-center justify-center py-12 px-6">
-                {/* PDF Icon and File Info */}
-                <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center text-white mb-6 shadow-lg">
-                  <FileText className="w-12 h-12" />
-                </div>
-                
-                <h3 className="text-xl font-semibold mb-2">
-                  {lesson.content_url.split('/').pop()?.replace(/%20/g, ' ') || 'Document.pdf'}
-                </h3>
-                
-                <p className="text-muted-foreground text-center mb-8 max-w-md">
-                  This lesson contains a PDF document. Click the button below to view or download the file.
-                </p>
-                
-                {/* Action Buttons */}
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <Button
-                    size="lg"
-                    className="min-w-[200px]"
-                    onClick={() => window.open(lesson.content_url!, '_blank')}
-                  >
-                    <FileText className="w-5 h-5 mr-2" />
-                    View PDF
-                  </Button>
+              <div className="w-full space-y-4">
+                {/* Download button */}
+                <div className="flex justify-end">
                   <Button
                     variant="outline"
-                    size="lg"
-                    className="min-w-[200px]"
-                    asChild
+                    size="sm"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      window.open(lesson.content_url!, '_blank', 'noopener,noreferrer');
+                    }}
                   >
-                    <a href={lesson.content_url} download target="_blank" rel="noopener noreferrer">
-                      Download PDF
-                    </a>
+                    <FileText className="w-4 h-4 mr-2" />
+                    View/Download PDF
                   </Button>
                 </div>
-                
-                {/* Alternative: Try embedded viewer */}
-                <div className="mt-8 w-full">
-                  <p className="text-sm text-muted-foreground text-center mb-4">
-                    Or try the embedded preview below:
-                  </p>
-                  <div className="w-full bg-white rounded-lg overflow-hidden border" style={{ height: '60vh', minHeight: '400px' }}>
-                    <iframe
-                      src={lesson.content_url}
-                      className="w-full h-full"
-                      title="PDF Preview"
-                    />
-                  </div>
+                {/* PDF iframe embed using Google Docs Viewer */}
+                <div className="w-full bg-gray-100 rounded-lg overflow-hidden border shadow-sm" style={{ height: '80vh', minHeight: '600px' }}>
+                  <iframe
+                    src={`https://docs.google.com/gview?url=${encodeURIComponent(lesson.content_url)}&embedded=true`}
+                    className="w-full h-full"
+                    title={lesson.name}
+                    style={{ border: 'none' }}
+                  />
                 </div>
               </div>
             )}

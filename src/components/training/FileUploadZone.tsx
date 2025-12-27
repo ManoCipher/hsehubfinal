@@ -28,6 +28,8 @@ export default function FileUploadZone({
     const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME?.trim();
     const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET?.trim().replace(/"/g, "");
 
+    console.log("Cloudinary Config:", { cloudName, uploadPreset, lessonType });
+
     if (!cloudName || !uploadPreset) {
       toast({
         title: "Configuration Error",
@@ -37,17 +39,24 @@ export default function FileUploadZone({
       return;
     }
 
-    // Use 'raw' for PDFs, 'video' for video/audio, 'auto' for others
-    // PDFs need 'raw' resource type to be accessible
+    // Check if Cloudinary is available
+    if (!window.cloudinary) {
+      toast({
+        title: "Upload Error",
+        description: "Cloudinary widget not loaded. Please refresh the page.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Use 'video' for video/audio, 'auto' for PDFs and others (raw causes access issues)
     const resourceType = lessonType === "video_audio" 
       ? "video" 
-      : lessonType === "pdf" 
-        ? "raw"  // Changed from 'auto' to 'raw' for PDFs
-        : "auto";
+      : "auto";
         
     const allowedFormats =
       lessonType === "video_audio"
-        ? ["mp4", "webm", "mp3", "wav"]
+        ? ["mp4", "webm", "mov", "avi", "mkv", "mp3", "wav", "ogg", "m4a", "flac"]
         : lessonType === "pdf"
         ? ["pdf"]
         : ["mp4", "webm", "mp3", "pdf", "png", "jpg", "jpeg"];
@@ -61,7 +70,6 @@ export default function FileUploadZone({
         resourceType: resourceType,
         clientAllowedFormats: allowedFormats,
         maxFileSize: maxFileSizeMB * 1024 * 1024,
-        // Ensure files are publicly accessible
         folder: "hse-hub-lessons",
         tags: ["lesson", lessonType],
         styles: {
@@ -140,19 +148,47 @@ export default function FileUploadZone({
               </p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => onUploadComplete("")}
-            title="Remove file"
-          >
-            <X className="w-4 h-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Download button for PDF */}
+            {lessonType === "pdf" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  window.open(currentFileUrl, '_blank', 'noopener,noreferrer');
+                }}
+                title="View/Download PDF"
+              >
+                View
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onUploadComplete("")}
+              title="Remove file"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
 
         {lessonType === "video_audio" && (
           <div className="mt-4 rounded-lg overflow-hidden bg-black aspect-video">
             <video src={currentFileUrl} controls className="w-full h-full object-contain" />
+          </div>
+        )}
+
+        {lessonType === "pdf" && (
+          <div className="mt-4 rounded-lg overflow-hidden border bg-gray-100" style={{ height: '400px' }}>
+            <iframe
+              src={`https://docs.google.com/gview?url=${encodeURIComponent(currentFileUrl)}&embedded=true`}
+              className="w-full h-full"
+              title="PDF Preview"
+              style={{ border: 'none' }}
+            />
           </div>
         )}
       </div>
@@ -181,11 +217,11 @@ export default function FileUploadZone({
 
         <div className="text-center space-y-1">
           <p className="font-medium text-lg">
-            {isUploading ? "Uploading..." : "Dateien auswählen oder hier ablegen"}
+            {isUploading ? "Uploading..." : "Select files or drop them here"}
           </p>
           <p className="text-sm text-muted-foreground">
-            {lessonType === "video_audio" && "Video & Audioformate bis zu 500MB"}
-            {lessonType === "pdf" && "PDF-Dateien bis zu 500MB"}
+            {lessonType === "video_audio" && "Video & Audio formats up to 500MB"}
+            {lessonType === "pdf" && "PDF files up to 500MB"}
           </p>
         </div>
 

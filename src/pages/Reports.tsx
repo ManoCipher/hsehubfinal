@@ -498,12 +498,13 @@ export default function Reports() {
       <main className="flex-1 overflow-auto">
         {/* Professional Header */}
         <header className="sticky top-0 z-10 bg-card border-b px-8 py-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4 flex-1">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-4 flex-1 min-w-[300px]">
               <Input
                 value={reportName}
                 onChange={(e) => setReportName(e.target.value)}
-                className="max-w-xs font-semibold border-none shadow-none focus-visible:ring-0 text-lg"
+                className="w-full max-w-lg font-semibold text-lg px-2"
+                placeholder="Report Name"
               />
             </div>
             
@@ -607,31 +608,31 @@ export default function Reports() {
 // Default layout for the dashboard grid
 const defaultLayouts = {
   lg: [
-    { i: "risk-assessments", x: 0, y: 0, w: 3, h: 3, minW: 2, minH: 3, static: false },
-    { i: "safety-audits", x: 3, y: 0, w: 3, h: 3, minW: 2, minH: 3, static: false },
-    { i: "incidents", x: 6, y: 0, w: 3, h: 3, minW: 2, minH: 3, static: false },
-    { i: "training-compliance", x: 9, y: 0, w: 3, h: 3, minW: 2, minH: 3, static: false },
-    { i: "incident-trends", x: 0, y: 3, w: 12, h: 6, minW: 6, minH: 5, static: false },
-    { i: "audit-completion", x: 0, y: 9, w: 6, h: 5, minW: 4, minH: 4, static: false },
-    { i: "task-completion", x: 6, y: 9, w: 6, h: 5, minW: 4, minH: 4, static: false },
+    { i: "risk-assessments", x: 0, y: 0, w: 3, h: 3, minW: 2, minH: 2, static: false },
+    { i: "safety-audits", x: 3, y: 0, w: 3, h: 3, minW: 2, minH: 2, static: false },
+    { i: "incidents", x: 6, y: 0, w: 3, h: 3, minW: 2, minH: 2, static: false },
+    { i: "training-compliance", x: 9, y: 0, w: 3, h: 3, minW: 2, minH: 2, static: false },
+    { i: "incident-trends", x: 0, y: 3, w: 12, h: 6, minW: 6, minH: 4, static: false },
+    { i: "audit-completion", x: 0, y: 9, w: 6, h: 6, minW: 4, minH: 4, static: false },
+    { i: "task-completion", x: 6, y: 9, w: 6, h: 6, minW: 4, minH: 4, static: false },
   ],
   md: [
-    { i: "risk-assessments", x: 0, y: 0, w: 5, h: 3, minW: 3, minH: 3, static: false },
-    { i: "safety-audits", x: 5, y: 0, w: 5, h: 3, minW: 3, minH: 3, static: false },
-    { i: "incidents", x: 0, y: 3, w: 5, h: 3, minW: 3, minH: 3, static: false },
-    { i: "training-compliance", x: 5, y: 3, w: 5, h: 3, minW: 3, minH: 3, static: false },
-    { i: "incident-trends", x: 0, y: 6, w: 10, h: 6, minW: 6, minH: 5, static: false },
-    { i: "audit-completion", x: 0, y: 12, w: 5, h: 5, minW: 4, minH: 4, static: false },
-    { i: "task-completion", x: 5, y: 12, w: 5, h: 5, minW: 4, minH: 4, static: false },
+    { i: "risk-assessments", x: 0, y: 0, w: 5, h: 2, minW: 3, minH: 2, static: false },
+    { i: "safety-audits", x: 5, y: 0, w: 5, h: 2, minW: 3, minH: 2, static: false },
+    { i: "incidents", x: 0, y: 2, w: 5, h: 2, minW: 3, minH: 2, static: false },
+    { i: "training-compliance", x: 5, y: 2, w: 5, h: 2, minW: 3, minH: 2, static: false },
+    { i: "incident-trends", x: 0, y: 4, w: 10, h: 5, minW: 6, minH: 4, static: false },
+    { i: "audit-completion", x: 0, y: 9, w: 5, h: 4, minW: 4, minH: 3, static: false },
+    { i: "task-completion", x: 5, y: 9, w: 5, h: 4, minW: 4, minH: 3, static: false },
   ],
   sm: [
-    { i: "risk-assessments", x: 0, y: 0, w: 6, h: 3, minW: 3, minH: 3, static: false },
-    { i: "safety-audits", x: 0, y: 3, w: 6, h: 3, minW: 3, minH: 3, static: false },
-    { i: "incidents", x: 0, y: 6, w: 6, h: 3, minW: 3, minH: 3, static: false },
-    { i: "training-compliance", x: 0, y: 9, w: 6, h: 3, minW: 3, minH: 3, static: false },
-    { i: "incident-trends", x: 0, y: 12, w: 6, h: 6, minW: 4, minH: 5, static: false },
-    { i: "audit-completion", x: 0, y: 18, w: 6, h: 5, minW: 3, minH: 4, static: false },
-    { i: "task-completion", x: 0, y: 23, w: 6, h: 5, minW: 3, minH: 4, static: false },
+    { i: "risk-assessments", x: 0, y: 0, w: 6, h: 2, minW: 3, minH: 2, static: false },
+    { i: "safety-audits", x: 0, y: 2, w: 6, h: 2, minW: 3, minH: 2, static: false },
+    { i: "incidents", x: 0, y: 4, w: 6, h: 2, minW: 3, minH: 2, static: false },
+    { i: "training-compliance", x: 0, y: 6, w: 6, h: 2, minW: 3, minH: 2, static: false },
+    { i: "incident-trends", x: 0, y: 8, w: 6, h: 5, minW: 4, minH: 4, static: false },
+    { i: "audit-completion", x: 0, y: 13, w: 6, h: 4, minW: 3, minH: 3, static: false },
+    { i: "task-completion", x: 0, y: 17, w: 6, h: 4, minW: 3, minH: 3, static: false },
   ],
 };
 
@@ -754,12 +755,12 @@ function OverviewSection({
         layouts={layouts}
         breakpoints={{ lg: 1200, md: 996, sm: 768 }}
         cols={{ lg: 12, md: 10, sm: 6 }}
-        rowHeight={70}
+        rowHeight={80}
         onLayoutChange={handleLayoutChange}
         draggableHandle=".drag-handle"
         isResizable={true}
         isDraggable={true}
-        margin={[20, 20]}
+        margin={[16, 16]}
         containerPadding={[0, 0]}
         compactType="vertical"
       >
@@ -813,11 +814,11 @@ function OverviewSection({
             <div className="drag-handle border-b">
               <GripVertical className="w-4 h-4 text-muted-foreground" />
             </div>
-            <CardHeader className="py-3">
-              <CardTitle>Incident Trends</CardTitle>
+            <CardHeader className="py-4 pb-3">
+              <CardTitle className="text-lg">Incident Trends</CardTitle>
               <CardDescription>Monthly incident reports over the last 6 months</CardDescription>
             </CardHeader>
-            <CardContent className="flex-1 pb-4">
+            <CardContent className="flex-1 pb-4 pt-0">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData}>
                   <defs>
@@ -850,24 +851,24 @@ function OverviewSection({
             <div className="drag-handle border-b">
               <GripVertical className="w-4 h-4 text-muted-foreground" />
             </div>
-            <CardHeader className="py-3">
-              <CardTitle>Audit Completion</CardTitle>
+            <CardHeader className="py-4 pb-3">
+              <CardTitle className="text-lg">Audit Completion</CardTitle>
               <CardDescription>Safety audit metrics</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pb-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Total Audits</span>
-                <Badge>{stats.totalAudits}</Badge>
+                <Badge className="text-sm px-2.5 py-0.5">{stats.totalAudits}</Badge>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Completed</span>
-                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-sm px-2.5 py-0.5">
                   {stats.completedAudits}
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Completion Rate</span>
-                <span className="text-lg font-bold">
+                <span className="text-xl font-bold">
                   {stats.totalAudits > 0
                     ? Math.round((stats.completedAudits / stats.totalAudits) * 100)
                     : 0}
@@ -880,7 +881,7 @@ function OverviewSection({
                     ? (stats.completedAudits / stats.totalAudits) * 100
                     : 0
                 }
-                className="h-2"
+                className="h-2.5 mt-2"
               />
             </CardContent>
           </Card>
@@ -892,24 +893,24 @@ function OverviewSection({
             <div className="drag-handle border-b">
               <GripVertical className="w-4 h-4 text-muted-foreground" />
             </div>
-            <CardHeader className="py-3">
-              <CardTitle>Task Completion</CardTitle>
+            <CardHeader className="py-4 pb-3">
+              <CardTitle className="text-lg">Task Completion</CardTitle>
               <CardDescription>Corrective action tracking</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pb-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Total Tasks</span>
-                <Badge>{stats.totalTasks}</Badge>
+                <Badge className="text-sm px-2.5 py-0.5">{stats.totalTasks}</Badge>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Completed</span>
-                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-sm px-2.5 py-0.5">
                   {stats.completedTasks}
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Completion Rate</span>
-                <span className="text-lg font-bold">
+                <span className="text-xl font-bold">
                   {stats.totalTasks > 0
                     ? Math.round((stats.completedTasks / stats.totalTasks) * 100)
                     : 0}
@@ -922,7 +923,7 @@ function OverviewSection({
                     ? (stats.completedTasks / stats.totalTasks) * 100
                     : 0
                 }
-                className="h-2"
+                className="h-2.5 mt-2"
               />
             </CardContent>
           </Card>
@@ -1082,12 +1083,12 @@ function DraggableGridSection({
         layouts={layoutsWithLocks}
         breakpoints={{ lg: 1200, md: 996, sm: 768 }}
         cols={{ lg: 12, md: 10, sm: 6 }}
-        rowHeight={70}
+        rowHeight={80}
         onLayoutChange={handleLayoutChange}
         draggableHandle=".drag-handle"
         isResizable={true}
         isDraggable={true}
-        margin={[20, 20]}
+        margin={[16, 16]}
         containerPadding={[0, 0]}
         compactType="vertical"
       >
@@ -1167,17 +1168,17 @@ function DraggableCard({
   color: string;
 }) {
   return (
-    <Card className="dashboard-grid-card border hover:border-primary/50 transition-colors shadow-sm">
-      <div className="drag-handle border-b">
+    <Card className="dashboard-grid-card border hover:border-primary/50 transition-colors shadow-sm h-full">
+      <div className="drag-handle border-b cursor-grab active:cursor-grabbing flex-shrink-0">
         <GripVertical className="w-4 h-4 text-muted-foreground" />
       </div>
-      <CardContent className="p-6 flex-1 flex flex-col justify-center">
-        <div className={`w-12 h-12 rounded-lg ${color} flex items-center justify-center mb-4`}>
+      <CardContent className="flex-1 flex flex-col items-center justify-center text-center p-4 overflow-hidden">
+        <div className={`w-10 h-10 rounded-lg ${color} flex items-center justify-center flex-shrink-0 mb-3`}>
           {icon}
         </div>
-        <h3 className="text-sm font-medium text-muted-foreground mb-1">{title}</h3>
-        <p className="text-xs text-muted-foreground mb-3">{subtitle}</p>
-        <p className="text-3xl font-bold">{value}</p>
+        <h3 className="font-medium text-foreground text-sm">{title}</h3>
+        <p className="text-muted-foreground text-xs mb-2">{subtitle}</p>
+        <p className="font-bold text-foreground text-2xl">{value}</p>
       </CardContent>
     </Card>
   );
@@ -1211,84 +1212,251 @@ function KPICard({
   );
 }
 
-// Placeholder sections - will implement in next steps
+// Sections with draggable card layouts
 function RiskAssessmentsSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
+  const { toast } = useToast();
+  const defaultLayout = [
+    { i: "risk-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+  ];
+  
+  const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
+    try {
+      const saved = localStorage.getItem('hse_layout_risk_assessments');
+      if (saved) return JSON.parse(saved);
+    } catch (error) {
+      console.error('Error loading risk assessments layout:', error);
+    }
+    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+  });
+
+  const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
+    setLayouts(allLayouts);
+    try {
+      localStorage.setItem('hse_layout_risk_assessments', JSON.stringify(allLayouts));
+    } catch (error) {
+      console.error('Error saving risk assessments layout:', error);
+    }
+  }, []);
+
+  const resetLayout = useCallback(() => {
+    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    setLayouts(defaultLayouts);
+    localStorage.removeItem('hse_layout_risk_assessments');
+    toast({ title: "Layout Reset", description: "Risk Assessments layout has been reset to default" });
+  }, [toast]);
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold mb-2">Risk Assessments</h2>
-        <p className="text-muted-foreground">GBU and hazard analysis</p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold mb-2">Risk Assessments</h2>
+          <p className="text-muted-foreground">GBU and hazard analysis. Drag cards to reposition, drag corners to resize.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={resetLayout}>
+          <RotateCcw className="w-4 h-4 mr-2" />
+          Reset Layout
+        </Button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <KPICard
-          title="Total GBU"
-          subtitle="Risk assessments"
-          value={stats.totalRiskAssessments}
-          icon={<Shield className="w-5 h-5" />}
-          color="bg-orange-50 text-orange-600"
-        />
-      </div>
+
+      <ResponsiveGridLayout
+        className="layout"
+        layouts={layouts}
+        breakpoints={{ lg: 1200, md: 996, sm: 768 }}
+        cols={{ lg: 12, md: 10, sm: 6 }}
+        rowHeight={80}
+        onLayoutChange={handleLayoutChange}
+        draggableHandle=".drag-handle"
+        isResizable={true}
+        isDraggable={true}
+        margin={[16, 16]}
+        containerPadding={[0, 0]}
+        compactType="vertical"
+      >
+        <div key="risk-total">
+          <DraggableCard
+            title="Total GBU"
+            subtitle="Risk assessments"
+            value={stats.totalRiskAssessments}
+            icon={<Shield className="w-5 h-5" />}
+            color="bg-orange-50 text-orange-600"
+          />
+        </div>
+      </ResponsiveGridLayout>
     </div>
-  );
-}
+  );}
 
 function AuditsSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
+  const { toast } = useToast();
+  const defaultLayout = [
+    { i: "audit-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+    { i: "audit-completed", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+  ];
+  
+  const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
+    try {
+      const saved = localStorage.getItem('hse_layout_audits');
+      if (saved) return JSON.parse(saved);
+    } catch (error) {
+      console.error('Error loading audits layout:', error);
+    }
+    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+  });
+
+  const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
+    setLayouts(allLayouts);
+    try {
+      localStorage.setItem('hse_layout_audits', JSON.stringify(allLayouts));
+    } catch (error) {
+      console.error('Error saving audits layout:', error);
+    }
+  }, []);
+
+  const resetLayout = useCallback(() => {
+    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    setLayouts(defaultLayouts);
+    localStorage.removeItem('hse_layout_audits');
+    toast({ title: "Layout Reset", description: "Audits layout has been reset to default" });
+  }, [toast]);
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold mb-2">Safety Audits</h2>
-        <p className="text-muted-foreground">Audit completion and compliance</p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold mb-2">Safety Audits</h2>
+          <p className="text-muted-foreground">Audit completion and compliance. Drag cards to reposition, drag corners to resize.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={resetLayout}>
+          <RotateCcw className="w-4 h-4 mr-2" />
+          Reset Layout
+        </Button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <KPICard
-          title="Total Audits"
-          subtitle="All audits"
-          value={stats.totalAudits}
-          icon={<ClipboardCheck className="w-5 h-5" />}
-          color="bg-blue-50 text-blue-600"
-        />
-        <KPICard
-          title="Completed"
-          subtitle="Finished audits"
-          value={stats.completedAudits}
-          icon={<CheckCircle className="w-5 h-5" />}
-          color="bg-green-50 text-green-600"
-        />
-      </div>
+
+      <ResponsiveGridLayout
+        className="layout"
+        layouts={layouts}
+        breakpoints={{ lg: 1200, md: 996, sm: 768 }}
+        cols={{ lg: 12, md: 10, sm: 6 }}
+        rowHeight={80}
+        onLayoutChange={handleLayoutChange}
+        draggableHandle=".drag-handle"
+        isResizable={true}
+        isDraggable={true}
+        margin={[16, 16]}
+        containerPadding={[0, 0]}
+        compactType="vertical"
+      >
+        <div key="audit-total">
+          <DraggableCard
+            title="Total Audits"
+            subtitle="All audits"
+            value={stats.totalAudits}
+            icon={<ClipboardCheck className="w-5 h-5" />}
+            color="bg-blue-50 text-blue-600"
+          />
+        </div>
+        <div key="audit-completed">
+          <DraggableCard
+            title="Completed"
+            subtitle="Finished audits"
+            value={stats.completedAudits}
+            icon={<CheckCircle className="w-5 h-5" />}
+            color="bg-green-50 text-green-600"
+          />
+        </div>
+      </ResponsiveGridLayout>
     </div>
   );
 }
 
 function IncidentsSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
+  const { toast } = useToast();
+  const defaultLayout = [
+    { i: "incident-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+    { i: "incident-open", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+    { i: "incident-closed", x: 6, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+  ];
+  
+  const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
+    try {
+      const saved = localStorage.getItem('hse_layout_incidents');
+      if (saved) return JSON.parse(saved);
+    } catch (error) {
+      console.error('Error loading incidents layout:', error);
+    }
+    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+  });
+
+  const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
+    setLayouts(allLayouts);
+    try {
+      localStorage.setItem('hse_layout_incidents', JSON.stringify(allLayouts));
+    } catch (error) {
+      console.error('Error saving incidents layout:', error);
+    }
+  }, []);
+
+  const resetLayout = useCallback(() => {
+    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    setLayouts(defaultLayouts);
+    localStorage.removeItem('hse_layout_incidents');
+    toast({ title: "Layout Reset", description: "Incidents layout has been reset to default" });
+  }, [toast]);
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold mb-2">Incidents</h2>
-        <p className="text-muted-foreground">Workplace incident tracking</p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold mb-2">Incidents</h2>
+          <p className="text-muted-foreground">Workplace incident tracking. Drag cards to reposition, drag corners to resize.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={resetLayout}>
+          <RotateCcw className="w-4 h-4 mr-2" />
+          Reset Layout
+        </Button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <KPICard
-          title="Total Incidents"
-          subtitle="All incidents"
-          value={stats.totalIncidents}
-          icon={<AlertTriangle className="w-5 h-5" />}
-          color="bg-red-50 text-red-600"
-        />
-        <KPICard
-          title="Open Cases"
-          subtitle="Under investigation"
-          value={stats.openIncidents}
-          icon={<AlertTriangle className="w-5 h-5" />}
-          color="bg-orange-50 text-orange-600"
-        />
-        <KPICard
-          title="Closed"
-          subtitle="Resolved incidents"
-          value={stats.totalIncidents - stats.openIncidents}
-          icon={<CheckCircle className="w-5 h-5" />}
-          color="bg-green-50 text-green-600"
-        />
-      </div>
+
+      <ResponsiveGridLayout
+        className="layout"
+        layouts={layouts}
+        breakpoints={{ lg: 1200, md: 996, sm: 768 }}
+        cols={{ lg: 12, md: 10, sm: 6 }}
+        rowHeight={80}
+        onLayoutChange={handleLayoutChange}
+        draggableHandle=".drag-handle"
+        isResizable={true}
+        isDraggable={true}
+        margin={[16, 16]}
+        containerPadding={[0, 0]}
+        compactType="vertical"
+      >
+        <div key="incident-total">
+          <DraggableCard
+            title="Total Incidents"
+            subtitle="All incidents"
+            value={stats.totalIncidents}
+            icon={<AlertTriangle className="w-5 h-5" />}
+            color="bg-red-50 text-red-600"
+          />
+        </div>
+        <div key="incident-open">
+          <DraggableCard
+            title="Open Cases"
+            subtitle="Under investigation"
+            value={stats.openIncidents}
+            icon={<AlertTriangle className="w-5 h-5" />}
+            color="bg-orange-50 text-orange-600"
+          />
+        </div>
+        <div key="incident-closed">
+          <DraggableCard
+            title="Closed"
+            subtitle="Resolved incidents"
+            value={stats.totalIncidents - stats.openIncidents}
+            icon={<CheckCircle className="w-5 h-5" />}
+            color="bg-green-50 text-green-600"
+          />
+        </div>
+      </ResponsiveGridLayout>
     </div>
   );
 }
@@ -1302,29 +1470,84 @@ function TrainingsSection({
   trainingMatrix: TrainingStatus[];
   chartData: any[];
 }) {
+  const { toast } = useToast();
+  const defaultLayout = [
+    { i: "training-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+    { i: "training-compliance", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+  ];
+  
+  const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
+    try {
+      const saved = localStorage.getItem('hse_layout_trainings');
+      if (saved) return JSON.parse(saved);
+    } catch (error) {
+      console.error('Error loading trainings layout:', error);
+    }
+    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+  });
+
+  const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
+    setLayouts(allLayouts);
+    try {
+      localStorage.setItem('hse_layout_trainings', JSON.stringify(allLayouts));
+    } catch (error) {
+      console.error('Error saving trainings layout:', error);
+    }
+  }, []);
+
+  const resetLayout = useCallback(() => {
+    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    setLayouts(defaultLayouts);
+    localStorage.removeItem('hse_layout_trainings');
+    toast({ title: "Layout Reset", description: "Trainings layout has been reset to default" });
+  }, [toast]);
+
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold mb-2">Trainings</h2>
-        <p className="text-muted-foreground">Employee training compliance</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold mb-2">Trainings</h2>
+          <p className="text-muted-foreground">Employee training compliance. Drag cards to reposition, drag corners to resize.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={resetLayout}>
+          <RotateCcw className="w-4 h-4 mr-2" />
+          Reset Layout
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <KPICard
-          title="Total Courses"
-          subtitle="Training programs"
-          value={stats.totalTrainings}
-          icon={<GraduationCap className="w-5 h-5" />}
-          color="bg-green-50 text-green-600"
-        />
-        <KPICard
-          title="Compliance Rate"
-          subtitle="Overall compliance"
-          value={`${stats.trainingCompliance}%`}
-          icon={<CheckCircle className="w-5 h-5" />}
-          color="bg-blue-50 text-blue-600"
-        />
-      </div>
+      <ResponsiveGridLayout
+        className="layout"
+        layouts={layouts}
+        breakpoints={{ lg: 1200, md: 996, sm: 768 }}
+        cols={{ lg: 12, md: 10, sm: 6 }}
+        rowHeight={80}
+        onLayoutChange={handleLayoutChange}
+        draggableHandle=".drag-handle"
+        isResizable={true}
+        isDraggable={true}
+        margin={[16, 16]}
+        containerPadding={[0, 0]}
+        compactType="vertical"
+      >
+        <div key="training-total">
+          <DraggableCard
+            title="Total Courses"
+            subtitle="Training programs"
+            value={stats.totalTrainings}
+            icon={<GraduationCap className="w-5 h-5" />}
+            color="bg-green-50 text-green-600"
+          />
+        </div>
+        <div key="training-compliance">
+          <DraggableCard
+            title="Compliance Rate"
+            subtitle="Overall compliance"
+            value={`${stats.trainingCompliance}%`}
+            icon={<CheckCircle className="w-5 h-5" />}
+            color="bg-blue-50 text-blue-600"
+          />
+        </div>
+      </ResponsiveGridLayout>
 
       {/* Training Matrix */}
       <Card className="border shadow-sm">
@@ -1396,82 +1619,250 @@ function TrainingsSection({
 }
 
 function MeasuresSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
+  const { toast } = useToast();
+  const defaultLayout = [
+    { i: "measures-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+    { i: "measures-completed", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+    { i: "measures-progress", x: 6, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+  ];
+  
+  const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
+    try {
+      const saved = localStorage.getItem('hse_layout_measures');
+      if (saved) return JSON.parse(saved);
+    } catch (error) {
+      console.error('Error loading measures layout:', error);
+    }
+    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+  });
+
+  const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
+    setLayouts(allLayouts);
+    try {
+      localStorage.setItem('hse_layout_measures', JSON.stringify(allLayouts));
+    } catch (error) {
+      console.error('Error saving measures layout:', error);
+    }
+  }, []);
+
+  const resetLayout = useCallback(() => {
+    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    setLayouts(defaultLayouts);
+    localStorage.removeItem('hse_layout_measures');
+    toast({ title: "Layout Reset", description: "Measures layout has been reset to default" });
+  }, [toast]);
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold mb-2">Measures</h2>
-        <p className="text-muted-foreground">Corrective and preventive actions</p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold mb-2">Measures</h2>
+          <p className="text-muted-foreground">Corrective and preventive actions. Drag cards to reposition, drag corners to resize.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={resetLayout}>
+          <RotateCcw className="w-4 h-4 mr-2" />
+          Reset Layout
+        </Button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <KPICard
-          title="Total Measures"
-          subtitle="All measures"
-          value={stats.totalMeasures}
-          icon={<CheckCircle className="w-5 h-5" />}
-          color="bg-purple-50 text-purple-600"
-        />
-        <KPICard
-          title="Completed"
-          subtitle="Finished measures"
-          value={stats.completedMeasures}
-          icon={<CheckCircle className="w-5 h-5" />}
-          color="bg-green-50 text-green-600"
-        />
-        <KPICard
-          title="In Progress"
-          subtitle="Active measures"
-          value={stats.totalMeasures - stats.completedMeasures}
-          icon={<TrendingUp className="w-5 h-5" />}
-          color="bg-orange-50 text-orange-600"
-        />
-      </div>
+
+      <ResponsiveGridLayout
+        className="layout"
+        layouts={layouts}
+        breakpoints={{ lg: 1200, md: 996, sm: 768 }}
+        cols={{ lg: 12, md: 10, sm: 6 }}
+        rowHeight={80}
+        onLayoutChange={handleLayoutChange}
+        draggableHandle=".drag-handle"
+        isResizable={true}
+        isDraggable={true}
+        margin={[16, 16]}
+        containerPadding={[0, 0]}
+        compactType="vertical"
+      >
+        <div key="measures-total">
+          <DraggableCard
+            title="Total Measures"
+            subtitle="All measures"
+            value={stats.totalMeasures}
+            icon={<CheckCircle className="w-5 h-5" />}
+            color="bg-purple-50 text-purple-600"
+          />
+        </div>
+        <div key="measures-completed">
+          <DraggableCard
+            title="Completed"
+            subtitle="Finished measures"
+            value={stats.completedMeasures}
+            icon={<CheckCircle className="w-5 h-5" />}
+            color="bg-green-50 text-green-600"
+          />
+        </div>
+        <div key="measures-progress">
+          <DraggableCard
+            title="In Progress"
+            subtitle="Active measures"
+            value={stats.totalMeasures - stats.completedMeasures}
+            icon={<TrendingUp className="w-5 h-5" />}
+            color="bg-orange-50 text-orange-600"
+          />
+        </div>
+      </ResponsiveGridLayout>
     </div>
   );
 }
 
 function TasksSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
+  const { toast } = useToast();
+  const defaultLayout = [
+    { i: "tasks-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+    { i: "tasks-completed", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+  ];
+  
+  const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
+    try {
+      const saved = localStorage.getItem('hse_layout_tasks');
+      if (saved) return JSON.parse(saved);
+    } catch (error) {
+      console.error('Error loading tasks layout:', error);
+    }
+    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+  });
+
+  const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
+    setLayouts(allLayouts);
+    try {
+      localStorage.setItem('hse_layout_tasks', JSON.stringify(allLayouts));
+    } catch (error) {
+      console.error('Error saving tasks layout:', error);
+    }
+  }, []);
+
+  const resetLayout = useCallback(() => {
+    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    setLayouts(defaultLayouts);
+    localStorage.removeItem('hse_layout_tasks');
+    toast({ title: "Layout Reset", description: "Tasks layout has been reset to default" });
+  }, [toast]);
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold mb-2">Tasks</h2>
-        <p className="text-muted-foreground">Task management and completion</p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold mb-2">Tasks</h2>
+          <p className="text-muted-foreground">Task management and completion. Drag cards to reposition, drag corners to resize.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={resetLayout}>
+          <RotateCcw className="w-4 h-4 mr-2" />
+          Reset Layout
+        </Button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <KPICard
-          title="Total Tasks"
-          subtitle="All tasks"
-          value={stats.totalTasks}
-          icon={<ListChecks className="w-5 h-5" />}
-          color="bg-indigo-50 text-indigo-600"
-        />
-        <KPICard
-          title="Completed"
-          subtitle="Finished tasks"
-          value={stats.completedTasks}
-          icon={<CheckCircle className="w-5 h-5" />}
-          color="bg-green-50 text-green-600"
-        />
-      </div>
+
+      <ResponsiveGridLayout
+        className="layout"
+        layouts={layouts}
+        breakpoints={{ lg: 1200, md: 996, sm: 768 }}
+        cols={{ lg: 12, md: 10, sm: 6 }}
+        rowHeight={80}
+        onLayoutChange={handleLayoutChange}
+        draggableHandle=".drag-handle"
+        isResizable={true}
+        isDraggable={true}
+        margin={[16, 16]}
+        containerPadding={[0, 0]}
+        compactType="vertical"
+      >
+        <div key="tasks-total">
+          <DraggableCard
+            title="Total Tasks"
+            subtitle="All tasks"
+            value={stats.totalTasks}
+            icon={<ListChecks className="w-5 h-5" />}
+            color="bg-indigo-50 text-indigo-600"
+          />
+        </div>
+        <div key="tasks-completed">
+          <DraggableCard
+            title="Completed"
+            subtitle="Finished tasks"
+            value={stats.completedTasks}
+            icon={<CheckCircle className="w-5 h-5" />}
+            color="bg-green-50 text-green-600"
+          />
+        </div>
+      </ResponsiveGridLayout>
     </div>
   );
 }
 
 function CheckupsSection({ stats }: { stats: ReportStats }) {
+  const { toast } = useToast();
+  const defaultLayout = [
+    { i: "checkups-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
+  ];
+  
+  const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
+    try {
+      const saved = localStorage.getItem('hse_layout_checkups');
+      if (saved) return JSON.parse(saved);
+    } catch (error) {
+      console.error('Error loading checkups layout:', error);
+    }
+    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+  });
+
+  const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
+    setLayouts(allLayouts);
+    try {
+      localStorage.setItem('hse_layout_checkups', JSON.stringify(allLayouts));
+    } catch (error) {
+      console.error('Error saving checkups layout:', error);
+    }
+  }, []);
+
+  const resetLayout = useCallback(() => {
+    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    setLayouts(defaultLayouts);
+    localStorage.removeItem('hse_layout_checkups');
+    toast({ title: "Layout Reset", description: "Checkups layout has been reset to default" });
+  }, [toast]);
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold mb-2">Health Check-ups</h2>
-        <p className="text-muted-foreground">Employee health monitoring</p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold mb-2">Health Check-ups</h2>
+          <p className="text-muted-foreground">Employee health monitoring. Drag cards to reposition, drag corners to resize.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={resetLayout}>
+          <RotateCcw className="w-4 h-4 mr-2" />
+          Reset Layout
+        </Button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <KPICard
-          title="Total Check-ups"
-          subtitle="Health monitoring"
-          value={stats.totalCheckUps}
-          icon={<Stethoscope className="w-5 h-5" />}
-          color="bg-teal-50 text-teal-600"
-        />
-      </div>
+
+      <ResponsiveGridLayout
+        className="layout"
+        layouts={layouts}
+        breakpoints={{ lg: 1200, md: 996, sm: 768 }}
+        cols={{ lg: 12, md: 10, sm: 6 }}
+        rowHeight={80}
+        onLayoutChange={handleLayoutChange}
+        draggableHandle=".drag-handle"
+        isResizable={true}
+        isDraggable={true}
+        margin={[16, 16]}
+        containerPadding={[0, 0]}
+        compactType="vertical"
+      >
+        <div key="checkups-total">
+          <DraggableCard
+            title="Total Check-ups"
+            subtitle="Health monitoring"
+            value={stats.totalCheckUps}
+            icon={<Stethoscope className="w-5 h-5" />}
+            color="bg-teal-50 text-teal-600"
+          />
+        </div>
+      </ResponsiveGridLayout>
     </div>
   );
 }

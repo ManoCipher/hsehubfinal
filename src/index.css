@@ -275,6 +275,8 @@ iframe[src*="cloudinary"] {
   overflow: hidden;
   background: hsl(var(--card));
   border-radius: var(--radius);
+  min-width: 0;
+  min-height: 0;
 }
 
 .dashboard-grid-card .drag-handle {
@@ -287,6 +289,7 @@ iframe[src*="cloudinary"] {
   transition: all 200ms ease;
   background: transparent;
   flex-shrink: 0;
+  min-height: 32px;
 }
 
 .dashboard-grid-card:hover .drag-handle {
@@ -297,6 +300,38 @@ iframe[src*="cloudinary"] {
 .dashboard-grid-card .drag-handle:active {
   cursor: grabbing;
   opacity: 1;
+}
+
+/* CardContent responsive scaling */
+.dashboard-grid-card [class*="CardContent"],
+.dashboard-grid-card > div > div {
+  container-type: size;
+  container-name: card;
+}
+
+/* Smooth transitions for all card elements */
+.dashboard-grid-card * {
+  transition: font-size 0.2s ease, padding 0.2s ease, margin 0.2s ease;
+}
+
+/* React Grid Layout smooth resize */
+.react-grid-item {
+  transition: all 200ms ease;
+}
+
+.react-grid-item.resizing {
+  transition: none;
+  z-index: 100;
+}
+
+.react-grid-item.react-draggable-dragging {
+  transition: none;
+  z-index: 100;
+}
+
+.react-grid-item[style*="width"] .dashboard-grid-card .w-12 {
+  width: clamp(2rem, 4vw, 3rem);
+  height: clamp(2rem, 4vw, 3rem);
 }
 
 /* Ensure grid items don't overflow */

@@ -122,7 +122,7 @@ export default function LessonEditor() {
         description: err.message,
         variant: "destructive",
       });
-      navigate("/training");
+      navigate(`/training/${courseId}`);
     }
   };
 
@@ -268,14 +268,14 @@ export default function LessonEditor() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate("/training")}
+              onClick={() => navigate(`/training/${courseId}`)}
             >
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <span
                 className="hover:text-foreground cursor-pointer"
-                onClick={() => navigate("/training")}
+                onClick={() => navigate(`/training/${courseId}`)}
               >
                 {course?.name || "Course"}
               </span>
@@ -402,6 +402,7 @@ export default function LessonEditor() {
                       {t("training.videoAudioFormats")}
                     </p>
 
+                    {/* Option 1: Upload Video/Audio */}
                     <FormField
                       control={form.control}
                       name="content_url"
@@ -418,6 +419,37 @@ export default function LessonEditor() {
                         </FormItem>
                       )}
                     />
+
+                    {/* Option 2: Add Video Link */}
+                    {!form.watch("content_url") && (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-px bg-border" />
+                          <span className="text-sm text-muted-foreground px-2">OR</span>
+                          <div className="flex-1 h-px bg-border" />
+                        </div>
+                        <FormField
+                          control={form.control}
+                          name="content_url"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Video/Audio Link</FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder="https://youtube.com/watch?v=... or direct video URL"
+                                  {...field}
+                                  type="url"
+                                />
+                              </FormControl>
+                              <p className="text-xs text-muted-foreground">
+                                Paste a YouTube, Vimeo, or direct video/audio file URL
+                              </p>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
 
                     <div className="flex gap-2">
                       <Button type="button" variant="outline" className="flex-1">
@@ -498,7 +530,7 @@ export default function LessonEditor() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => navigate("/training")}
+                onClick={() => navigate(`/training/${courseId}`)}
               >
                 {t("common.cancel")}
               </Button>
