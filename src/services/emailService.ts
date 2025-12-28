@@ -23,8 +23,8 @@ export async function sendMemberInvitation(
             throw tokenError;
         }
 
-        // Build URL
-        const inviteUrl = `${window.location.origin}/notes/${token}`;
+        // Build URL - Point to the join team page, not notes
+        const inviteUrl = `${window.location.origin}/join/${token}`;
 
         // Send email via Supabase Edge Function
         const { data, error } = await supabase.functions.invoke(
@@ -38,9 +38,17 @@ export async function sendMemberInvitation(
             }
         );
 
+        console.log("Edge function response:", { data, error });
+
         if (error) {
             console.error("Error sending email:", error);
             throw error;
+        }
+
+        // Check if the response contains an error
+        if (data?.error) {
+            console.error("Edge function returned error:", data.error, data.details);
+            throw new Error(data.error);
         }
 
         return { success: true, token };

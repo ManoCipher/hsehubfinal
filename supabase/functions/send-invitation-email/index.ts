@@ -71,12 +71,23 @@ serve(async (req) => {
             .button {
               display: inline-block;
               background-color: #2563eb;
-              color: #ffffff;
+              color: #ffffff !important;
               text-decoration: none;
-              padding: 12px 24px;
+              padding: 14px 28px;
               border-radius: 6px;
               margin: 20px 0;
               font-weight: 600;
+              font-size: 16px;
+            }
+            .button:hover {
+              background-color: #1d4ed8;
+            }
+            .highlight {
+              background-color: #f0f9ff;
+              border-left: 4px solid #2563eb;
+              padding: 16px;
+              margin: 20px 0;
+              border-radius: 0 8px 8px 0;
             }
             .footer {
               margin-top: 40px;
@@ -89,16 +100,28 @@ serve(async (req) => {
         </head>
         <body>
           <div class="container">
-            <h1>You've been invited to HSE Hub</h1>
+            <h1>🎉 You're Invited to Join HSE Hub!</h1>
             <p>Hello ${name},</p>
-            <p>Here are your notes which are belonging to you:</p>
-            <p>
-              <a href="${inviteUrl}" class="button">View Your Notes</a>
+            <p>You've been invited to join your team on <strong>HSE Hub</strong> – a comprehensive Health, Safety, and Environment management platform.</p>
+            
+            <div class="highlight">
+              <p style="margin: 0;"><strong>What happens next?</strong></p>
+              <p style="margin: 8px 0 0 0;">Click the button below to create your account and join your team. You'll be able to access your company's HSE Hub immediately.</p>
+            </div>
+            
+            <p style="text-align: center;">
+              <a href="${inviteUrl}" class="button">Join Your Team</a>
             </p>
-            <p>This link will expire in 30 days.</p>
-            <p>If you didn't expect this invitation, please ignore this email.</p>
+            
+            <p style="font-size: 14px; color: #6b7280;">
+              <strong>Note:</strong> This invitation link will expire in 30 days. If you have any questions, please contact your administrator.
+            </p>
+            
+            <p>If the button doesn't work, copy and paste this link into your browser:</p>
+            <p style="word-break: break-all; font-size: 12px; color: #6b7280;">${inviteUrl}</p>
+            
             <div class="footer">
-              <p>This is an automated message from HSE Hub.</p>
+              <p>This is an automated message from HSE Hub. If you didn't expect this invitation, please ignore this email.</p>
             </div>
           </div>
         </body>
@@ -115,7 +138,7 @@ serve(async (req) => {
       body: JSON.stringify({
         sender: {
           name: "HSE Hub",
-          email: "noreply@hse-hub.com", // This will work with Brevo's default sender
+          email: "noreply@hse-hub.com",
         },
         to: [
           {
@@ -123,7 +146,7 @@ serve(async (req) => {
             name: name,
           },
         ],
-        subject: "Your HSE Hub Notes",
+        subject: "You're Invited to Join HSE Hub!",
         htmlContent: emailHtml,
       }),
     });
