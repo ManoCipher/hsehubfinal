@@ -298,7 +298,6 @@ export default function RiskAssessments() {
           .from("team_members")
           .select("id, first_name, last_name, email, role")
           .eq("company_id", companyId)
-          .eq("role", "Line Manager")
           .order("first_name"),
       ]);
 
