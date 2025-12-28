@@ -1532,7 +1532,7 @@ export default function EmployeeProfile() {
             employee_id: id,
             company_id: companyId,
             investigation_name: investigationName,
-            appointment_date: nextCheckupDate.toISOString().split("T")[0],
+            due_date: nextCheckupDate.toISOString().split("T")[0],
             status: "open",
             notes: "Auto-scheduled 3 years after previous checkup",
           });
@@ -1600,7 +1600,7 @@ export default function EmployeeProfile() {
             employee_id: id,
             company_id: companyId,
             investigation_name: investigationName,
-            appointment_date: nextCheckupDate.toISOString().split("T")[0],
+            due_date: nextCheckupDate.toISOString().split("T")[0],
             status: "open",
             notes: "Auto-scheduled 3 years after previous checkup",
           });
