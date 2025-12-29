@@ -49,10 +49,12 @@ export default function FileUploadZone({
       return;
     }
 
-    // Use 'video' for video/audio, 'auto' for PDFs and others (raw causes access issues)
+    // Use 'video' for video/audio, 'auto' for PDFs
+    // 'auto' lets Cloudinary decide - PDFs become 'image' type which is publicly accessible
+    // 'raw' requires authentication and causes 401 errors
     const resourceType = lessonType === "video_audio" 
       ? "video" 
-      : "auto";
+      : "auto";  // 'auto' makes PDFs publicly accessible
         
     const allowedFormats =
       lessonType === "video_audio"
@@ -72,6 +74,8 @@ export default function FileUploadZone({
         maxFileSize: maxFileSizeMB * 1024 * 1024,
         folder: "hse-hub-lessons",
         tags: ["lesson", lessonType],
+        // Ensure public access for all uploaded files
+        publicId: undefined, // Let Cloudinary generate the public ID
         styles: {
           palette: {
             window: "#FFFFFF",
@@ -92,9 +96,9 @@ export default function FileUploadZone({
       },
       (error: any, result: any) => {
         if (!error && result && result.event === "success") {
-          // For PDFs uploaded as 'raw', use the secure_url directly
+          // Use the secure_url directly
           const fileUrl = result.info.secure_url;
-          console.log("Uploaded file URL:", fileUrl);
+          console.log("Uploaded file URL:", fileUrl, "Resource type:", result.info.resource_type);
           onUploadComplete(fileUrl);
           toast({
             title: "Upload Successful",
@@ -182,13 +186,67 @@ export default function FileUploadZone({
         )}
 
         {lessonType === "pdf" && (
-          <div className="mt-4 rounded-lg overflow-hidden border bg-gray-100" style={{ height: '400px' }}>
-            <iframe
-              src={`https://docs.google.com/gview?url=${encodeURIComponent(currentFileUrl)}&embedded=true`}
-              className="w-full h-full"
-              title="PDF Preview"
-              style={{ border: 'none' }}
-            />
+          <div className="mt-4 space-y-3">
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  // Force download - handle different Cloudinary URL patterns
+                  let downloadUrl = currentFileUrl;
+                  if (downloadUrl.includes('cloudinary.com')) {
+                    downloadUrl = downloadUrl.replace(
+                      /\/(raw|image|video|auto)\/upload\//,
+                      '/$1/upload/fl_attachment/'
+                    );
+                  }
+                  // Use fetch for better cross-origin handling
+                  fetch(downloadUrl)
+                    .then(response => response.blob())
+                    .then(blob => {
+                      const url = window.URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = 'document.pdf';
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      window.URL.revokeObjectURL(url);
+                    })
+                    .catch(() => {
+                      // Fallback: open in new tab
+                      window.open(currentFileUrl, '_blank', 'noopener,noreferrer');
+                    });
+                }}
+              >
+                Download PDF
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  window.open(currentFileUrl, '_blank', 'noopener,noreferrer');
+                }}
+              >
+                Open in New Tab
+              </Button>
+            </div>
+            <div className="rounded-lg overflow-hidden border bg-gray-100" style={{ height: '400px' }}>
+              {/* Use iframe with direct URL - most browsers can render PDFs */}
+              <iframe
+                src={currentFileUrl}
+                className="w-full h-full"
+                title="PDF Preview"
+                style={{ border: 'none' }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              If preview doesn't load, use the buttons above to view or download the PDF
+            </p>
           </div>
         )}
       </div>

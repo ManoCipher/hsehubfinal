@@ -273,10 +273,47 @@ export default function LessonViewer() {
             {/* PDF Content */}
             {lesson.type === "pdf" && lesson.content_url && (
               <div className="w-full space-y-4">
-                {/* Download button */}
-                <div className="flex justify-end">
+                {/* Download/View buttons */}
+                <div className="flex justify-end gap-2">
                   <Button
                     variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      // Force download - for Cloudinary URLs, add fl_attachment flag
+                      let downloadUrl = lesson.content_url!;
+                      if (downloadUrl.includes('cloudinary.com')) {
+                        // Handle different Cloudinary URL patterns (raw/upload, image/upload, auto/upload)
+                        downloadUrl = downloadUrl.replace(
+                          /\/(raw|image|video|auto)\/upload\//,
+                          '/$1/upload/fl_attachment/'
+                        );
+                      }
+                      // Use fetch to download as blob for better cross-origin handling
+                      fetch(downloadUrl)
+                        .then(response => response.blob())
+                        .then(blob => {
+                          const url = window.URL.createObjectURL(blob);
+                          const link = document.createElement('a');
+                          link.href = url;
+                          link.download = lesson.name + '.pdf';
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          window.URL.revokeObjectURL(url);
+                        })
+                        .catch(() => {
+                          // Fallback: open in new tab
+                          window.open(lesson.content_url!, '_blank', 'noopener,noreferrer');
+                        });
+                    }}
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Download PDF
+                  </Button>
+                  <Button
+                    variant="default"
                     size="sm"
                     onClick={(e) => {
                       e.preventDefault();
@@ -284,19 +321,21 @@ export default function LessonViewer() {
                       window.open(lesson.content_url!, '_blank', 'noopener,noreferrer');
                     }}
                   >
-                    <FileText className="w-4 h-4 mr-2" />
-                    View/Download PDF
+                    Open in New Tab
                   </Button>
                 </div>
-                {/* PDF iframe embed using Google Docs Viewer */}
+                {/* PDF embed - using iframe for direct rendering */}
                 <div className="w-full bg-gray-100 rounded-lg overflow-hidden border shadow-sm" style={{ height: '80vh', minHeight: '600px' }}>
                   <iframe
-                    src={`https://docs.google.com/gview?url=${encodeURIComponent(lesson.content_url)}&embedded=true`}
+                    src={lesson.content_url}
                     className="w-full h-full"
                     title={lesson.name}
                     style={{ border: 'none' }}
                   />
                 </div>
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  If the PDF doesn't display, use the buttons above to view or download
+                </p>
               </div>
             )}
 
