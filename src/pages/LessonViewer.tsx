@@ -261,6 +261,7 @@ export default function LessonViewer() {
                     <video
                       src={lesson.content_url}
                       controls
+                      preload="auto"
                       className="w-full h-full"
                     >
                       Your browser does not support the video tag.
@@ -324,17 +325,22 @@ export default function LessonViewer() {
                     Open in New Tab
                   </Button>
                 </div>
-                {/* PDF embed - using iframe for direct rendering */}
-                <div className="w-full bg-gray-100 rounded-lg overflow-hidden border shadow-sm" style={{ height: '80vh', minHeight: '600px' }}>
-                  <iframe
+                {/* PDF embed - using object tag for better rendering */}
+                <object
+                  data={lesson.content_url}
+                  type="application/pdf"
+                  className="w-full rounded-lg border-2 border-gray-300"
+                  style={{ height: '800px', minHeight: '600px' }}
+                >
+                  {/* Fallback for browsers that don't support object tag for PDFs */}
+                  <embed
                     src={lesson.content_url}
+                    type="application/pdf"
                     className="w-full h-full"
-                    title={lesson.name}
-                    style={{ border: 'none' }}
                   />
-                </div>
-                <p className="text-xs text-muted-foreground text-center mt-2">
-                  If the PDF doesn't display, use the buttons above to view or download
+                </object>
+                <p className="text-xs text-muted-foreground text-center">
+                  If the PDF doesn't display correctly, use the "Open in New Tab" button above to view it in full screen
                 </p>
               </div>
             )}

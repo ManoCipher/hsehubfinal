@@ -293,7 +293,7 @@ export default function LessonEditor() {
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>{t("training.videoAudioLesson")}</CardTitle>
+                <CardTitle>{t("training.lessonDetails")}</CardTitle>
                 <p className="text-sm text-muted-foreground">
                   {t("training.learnMoreEditor")}
                 </p>
@@ -397,36 +397,31 @@ export default function LessonEditor() {
                 {/* Content based on type */}
                 {form.watch("type") === "video_audio" && (
                   <div className="space-y-4">
-                    <Label>{t("training.videoAudioNote")}</Label>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      {t("training.videoAudioFormats")}
-                    </p>
-
-                    {/* Option 1: Add Video Link (YouTube/Vimeo) - Always visible */}
+                    {/* Add Video Link */}
                     <FormField
                       control={form.control}
                       name="content_url"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Video Link (YouTube, Vimeo, or direct URL)</FormLabel>
+                          <FormLabel>Video Link (YouTube or direct URL)</FormLabel>
                           <FormControl>
                             <Input
-                              placeholder="https://youtube.com/watch?v=... or https://vimeo.com/..."
+                              placeholder="https://youtube.com/watch?v=..."
                               value={field.value || ""}
                               onChange={field.onChange}
                               type="url"
                             />
                           </FormControl>
                           <p className="text-xs text-muted-foreground">
-                            Paste a YouTube, Vimeo, or direct video/audio file URL. YouTube and Vimeo links will be embedded automatically.
+                            Paste a YouTube or direct video/audio file URL. YouTube links will be embedded automatically.
                           </p>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
 
-                    {/* Video Preview if URL is provided */}
-                    {form.watch("content_url") && (
+                    {/* Video Preview for YouTube links only - Cloudinary uploads show preview in FileUploadZone */}
+                    {form.watch("content_url") && !form.watch("content_url")?.includes('cloudinary.com') && (
                       <div className="mt-4 p-4 border rounded-lg bg-muted/30">
                         <div className="flex items-center justify-between mb-3">
                           <Label className="text-sm font-medium">Preview</Label>
@@ -442,31 +437,18 @@ export default function LessonEditor() {
                           </Button>
                         </div>
                         {(form.watch("content_url")?.includes('youtube.com') || 
-                          form.watch("content_url")?.includes('youtu.be') || 
-                          form.watch("content_url")?.includes('vimeo.com')) ? (
+                          form.watch("content_url")?.includes('youtu.be')) ? (
                           <div className="aspect-video bg-black rounded-lg overflow-hidden">
                             <iframe
                               src={
                                 form.watch("content_url")?.includes('youtube.com') 
                                   ? form.watch("content_url")?.replace('watch?v=', 'embed/')
-                                  : form.watch("content_url")?.includes('youtu.be')
-                                  ? form.watch("content_url")?.replace('youtu.be/', 'youtube.com/embed/')
-                                  : form.watch("content_url")?.includes('vimeo.com')
-                                  ? form.watch("content_url")?.replace('vimeo.com/', 'player.vimeo.com/video/')
-                                  : form.watch("content_url")
+                                  : form.watch("content_url")?.replace('youtu.be/', 'youtube.com/embed/')
                               }
                               className="w-full h-full"
                               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                               allowFullScreen
                               title="Video Preview"
-                            />
-                          </div>
-                        ) : form.watch("content_url")?.includes('cloudinary.com') ? (
-                          <div className="aspect-video bg-black rounded-lg overflow-hidden">
-                            <video
-                              src={form.watch("content_url")}
-                              controls
-                              className="w-full h-full object-contain"
                             />
                           </div>
                         ) : (
@@ -502,16 +484,6 @@ export default function LessonEditor() {
                       )}
                     />
 
-                    <div className="flex gap-2">
-                      <Button type="button" variant="outline" className="flex-1">
-                        <VideoIcon className="w-4 h-4 mr-2" />
-                        {t("training.recordVideo")}
-                      </Button>
-                      <Button type="button" variant="outline" className="flex-1">
-                        <UploadIcon className="w-4 h-4 mr-2" />
-                        {t("training.importVideo")}
-                      </Button>
-                    </div>
                   </div>
                 )}
 

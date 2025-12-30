@@ -181,71 +181,28 @@ export default function FileUploadZone({
 
         {lessonType === "video_audio" && (
           <div className="mt-4 rounded-lg overflow-hidden bg-black aspect-video">
-            <video src={currentFileUrl} controls className="w-full h-full object-contain" />
+            <video src={currentFileUrl} controls preload="metadata" className="w-full h-full object-contain" />
           </div>
         )}
 
         {lessonType === "pdf" && (
           <div className="mt-4 space-y-3">
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  // Force download - handle different Cloudinary URL patterns
-                  let downloadUrl = currentFileUrl;
-                  if (downloadUrl.includes('cloudinary.com')) {
-                    downloadUrl = downloadUrl.replace(
-                      /\/(raw|image|video|auto)\/upload\//,
-                      '/$1/upload/fl_attachment/'
-                    );
-                  }
-                  // Use fetch for better cross-origin handling
-                  fetch(downloadUrl)
-                    .then(response => response.blob())
-                    .then(blob => {
-                      const url = window.URL.createObjectURL(blob);
-                      const link = document.createElement('a');
-                      link.href = url;
-                      link.download = 'document.pdf';
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                      window.URL.revokeObjectURL(url);
-                    })
-                    .catch(() => {
-                      // Fallback: open in new tab
-                      window.open(currentFileUrl, '_blank', 'noopener,noreferrer');
-                    });
-                }}
-              >
-                Download PDF
-              </Button>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  window.open(currentFileUrl, '_blank', 'noopener,noreferrer');
-                }}
-              >
-                Open in New Tab
-              </Button>
-            </div>
-            <div className="rounded-lg overflow-hidden border bg-gray-100" style={{ height: '400px' }}>
-              {/* Use iframe with direct URL - most browsers can render PDFs */}
-              <iframe
+            {/* PDF embed - using object tag for better rendering */}
+            <object
+              data={currentFileUrl}
+              type="application/pdf"
+              className="w-full rounded-lg border-2 border-gray-300"
+              style={{ height: '500px' }}
+            >
+              {/* Fallback for browsers that don't support object tag for PDFs */}
+              <embed
                 src={currentFileUrl}
+                type="application/pdf"
                 className="w-full h-full"
-                title="PDF Preview"
-                style={{ border: 'none' }}
               />
-            </div>
-            <p className="text-xs text-muted-foreground text-center mt-2">
-              If preview doesn't load, use the buttons above to view or download the PDF
+            </object>
+            <p className="text-xs text-muted-foreground text-center">
+              If preview doesn't load, use the View button above to open the PDF
             </p>
           </div>
         )}

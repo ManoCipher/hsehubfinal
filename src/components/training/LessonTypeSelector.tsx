@@ -23,7 +23,7 @@ export default function LessonTypeSelector({
     { value: "pdf", label: "PDF", icon: FileText },
     { value: "text", label: "Text", icon: Type },
     { value: "iframe", label: "iFrame", icon: Code },
-    { value: "subchapter", label: "Unterkapitel", icon: FolderOpen },
+    { value: "subchapter", label: "Subchapter", icon: FolderOpen },
   ] as const;
 
   return (
