@@ -29,6 +29,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { usePermissions } from "@/hooks/usePermissions";
 import NotificationBell from "@/components/NotificationBell";
 
 type Props = {
@@ -38,6 +39,7 @@ type Props = {
 export default function MainLayout({ children }: Props) {
   const { userRole, signOut, companyName } = useAuth();
   const { language, setLanguage, t } = useLanguage();
+  const { hasPermission, loading: permissionsLoading, roleName } = usePermissions();
   const location = useLocation();
   const [darkMode, setDarkMode] = useState(false);
 
@@ -94,57 +96,76 @@ export default function MainLayout({ children }: Props) {
           </div>
 
           <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-            <Link to="/dashboard" className={getLinkClasses("/dashboard")}>
-              <BarChart className="w-4 h-4" />
-              <span>{t("nav.dashboard")}</span>
-            </Link>
-
-            <Link to="/employees" className={getLinkClasses("/employees")}>
-              <Users className="w-4 h-4" />
-              <span>{t("nav.employees")}</span>
-            </Link>
-
-            <Link
-              to="/investigations"
-              className={getLinkClasses("/investigations")}
-            >
-              <Shield className="w-4 h-4" />
-              <span>{t("nav.investigations")}</span>
-            </Link>
-
-            <Link
-              to="/risk-assessments"
-              className={getLinkClasses("/risk-assessments")}
-            >
-              <AlertTriangle className="w-4 h-4" />
-              <span>{t("nav.riskAssessments")}</span>
-            </Link>
-            <Link to="/training" className={getLinkClasses("/training")}>
-              <CheckCircle className="w-4 h-4" />
-              <span>{t("nav.trainings")}</span>
-            </Link>
-
-            <Link to="/incidents" className={getLinkClasses("/incidents")}>
-              <AlertTriangle className="w-4 h-4" />
-              <span>{t("nav.incidents")}</span>
-            </Link>
-
-            <Link to="/audits" className={getLinkClasses("/audits")}>
-              <FileCheck className="w-4 h-4" />
-              <span>{t("nav.audits")}</span>
-            </Link>
-
-            <Link to="/reports" className={getLinkClasses("/reports")}>
-              <BarChart className="w-4 h-4" />
-              <span>{t("nav.reports")}</span>
-            </Link>
-
-            <div className="pt-3 mt-3 border-t border-gray-200 dark:border-gray-800">
-              <Link to="/settings" className={getLinkClasses("/settings")}>
-                <Settings className="w-4 h-4" />
-                <span>{t("nav.settings")}</span>
+            {hasPermission("dashboard") && (
+              <Link to="/dashboard" className={getLinkClasses("/dashboard")}>
+                <BarChart className="w-4 h-4" />
+                <span>{t("nav.dashboard")}</span>
               </Link>
-            </div>
+            )}
+
+            {hasPermission("employees") && (
+              <Link to="/employees" className={getLinkClasses("/employees")}>
+                <Users className="w-4 h-4" />
+                <span>{t("nav.employees")}</span>
+              </Link>
+            )}
+
+            {hasPermission("investigations") && (
+              <Link
+                to="/investigations"
+                className={getLinkClasses("/investigations")}
+              >
+                <Shield className="w-4 h-4" />
+                <span>{t("nav.investigations")}</span>
+              </Link>
+            )}
+
+            {hasPermission("riskAssessments") && (
+              <Link
+                to="/risk-assessments"
+                className={getLinkClasses("/risk-assessments")}
+              >
+                <AlertTriangle className="w-4 h-4" />
+                <span>{t("nav.riskAssessments")}</span>
+              </Link>
+            )}
+
+            {hasPermission("trainings") && (
+              <Link to="/training" className={getLinkClasses("/training")}>
+                <CheckCircle className="w-4 h-4" />
+                <span>{t("nav.trainings")}</span>
+              </Link>
+            )}
+
+            {hasPermission("incidents") && (
+              <Link to="/incidents" className={getLinkClasses("/incidents")}>
+                <AlertTriangle className="w-4 h-4" />
+                <span>{t("nav.incidents")}</span>
+              </Link>
+            )}
+
+            {hasPermission("audits") && (
+              <Link to="/audits" className={getLinkClasses("/audits")}>
+                <FileCheck className="w-4 h-4" />
+                <span>{t("nav.audits")}</span>
+              </Link>
+            )}
+
+            {hasPermission("reports") && (
+              <Link to="/reports" className={getLinkClasses("/reports")}>
+                <BarChart className="w-4 h-4" />
+                <span>{t("nav.reports")}</span>
+              </Link>
+            )}
+
+            {hasPermission("settings") && (
+              <div className="pt-3 mt-3 border-t border-gray-200 dark:border-gray-800">
+                <Link to="/settings" className={getLinkClasses("/settings")}>
+                  <Settings className="w-4 h-4" />
+                  <span>{t("nav.settings")}</span>
+                </Link>
+              </div>
+            )}
           </nav>
 
           <div className="p-3 border-t border-gray-200 dark:border-gray-800 space-y-2">
@@ -155,7 +176,7 @@ export default function MainLayout({ children }: Props) {
                   {companyName || "Company"}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
-                  {userRole?.replace("_", " ") || "User"}
+                  {roleName || userRole?.replace("_", " ") || "User"}
                 </p>
               </div>
             </div>
