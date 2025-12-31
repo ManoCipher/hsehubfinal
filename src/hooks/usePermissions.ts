@@ -2,6 +2,15 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
+// Enable verbose logging in development
+const DEBUG_RBAC = import.meta.env.DEV;
+
+function logRBAC(message: string, data?: unknown) {
+  if (DEBUG_RBAC) {
+    console.log(`[RBAC] ${message}`, data !== undefined ? data : "");
+  }
+}
+
 export interface Permissions {
   dashboard: boolean;
   employees: boolean;
@@ -17,6 +26,7 @@ export interface Permissions {
   trainings: boolean;
 }
 
+// DENY ALL by default - security first approach
 const DEFAULT_PERMISSIONS: Permissions = {
   dashboard: false,
   employees: false,
@@ -61,6 +71,7 @@ export const ROUTE_PERMISSION_MAP: Record<string, keyof Permissions> = {
   "/reports": "reports",
   "/settings": "settings",
   "/documents": "documents",
+  "/health-checkups": "healthCheckups",
   "/activity-groups": "riskAssessments",
   "/measures": "riskAssessments",
   "/tasks": "dashboard",
@@ -76,7 +87,13 @@ export function usePermissions() {
   const [roleName, setRoleName] = useState<string | null>(null);
 
   const fetchPermissions = useCallback(async () => {
+    logRBAC("=== Permission Resolution Started ===");
+    logRBAC("User ID:", user?.id);
+    logRBAC("User Role (from auth):", userRole);
+    logRBAC("Company ID:", companyId);
+
     if (!user || !companyId) {
+      logRBAC("⚠️ No user or companyId - denying all permissions");
       setPermissions(DEFAULT_PERMISSIONS);
       setLoading(false);
       return;
@@ -84,6 +101,7 @@ export function usePermissions() {
 
     // Super admin gets all permissions
     if (userRole === "super_admin") {
+      logRBAC("✅ Super Admin detected - granting all permissions");
       setPermissions(SUPER_ADMIN_PERMISSIONS);
       setRoleName("Super Admin");
       setLoading(false);
@@ -92,6 +110,7 @@ export function usePermissions() {
 
     // Company admin gets all permissions
     if (userRole === "company_admin") {
+      logRBAC("✅ Company Admin detected - granting all permissions");
       setPermissions(ADMIN_PERMISSIONS);
       setRoleName("Admin");
       setLoading(false);
@@ -100,6 +119,7 @@ export function usePermissions() {
 
     try {
       // First, get the user's assigned role from team_members table
+      logRBAC("Fetching role from team_members table...");
       const { data: teamMember, error: teamError } = await supabase
         .from("team_members")
         .select("role")
@@ -108,13 +128,15 @@ export function usePermissions() {
         .maybeSingle();
 
       if (teamError) {
-        console.error("[usePermissions] Error fetching team member:", teamError);
+        logRBAC("❌ Error fetching team member:", teamError);
       }
 
       const assignedRole = teamMember?.role || "Employee";
+      logRBAC("Assigned Role:", assignedRole);
       setRoleName(assignedRole);
 
       // Now fetch permissions for this role from custom_roles table
+      logRBAC("Fetching permissions from custom_roles table for role:", assignedRole);
       const { data: roleData, error: roleError } = await supabase
         .from("custom_roles")
         .select("permissions")
@@ -123,43 +145,47 @@ export function usePermissions() {
         .maybeSingle();
 
       if (roleError) {
-        console.error("[usePermissions] Error fetching role permissions:", roleError);
+        logRBAC("❌ Error fetching role permissions:", roleError);
       }
+
+      logRBAC("Raw roleData from DB:", roleData);
 
       if (roleData?.permissions) {
         const dbPermissions = roleData.permissions as Record<string, boolean>;
+        logRBAC("DB Permissions object:", dbPermissions);
         
         // Map database permissions to our extended permissions
-        // For features not in the basic RBAC table, derive from related permissions
+        // STRICT: Only grant if explicitly true, never fallback to true
         const mappedPermissions: Permissions = {
-          dashboard: dbPermissions.dashboard ?? false,
-          employees: dbPermissions.employees ?? false,
-          healthCheckups: dbPermissions.healthCheckups ?? false,
-          documents: dbPermissions.documents ?? false,
-          reports: dbPermissions.reports ?? false,
-          audits: dbPermissions.audits ?? false,
-          settings: dbPermissions.settings ?? false,
-          // Extended: derive from base permissions or default to dashboard access
-          riskAssessments: dbPermissions.audits ?? dbPermissions.reports ?? false,
-          investigations: dbPermissions.audits ?? dbPermissions.reports ?? false,
-          incidents: dbPermissions.audits ?? dbPermissions.reports ?? false,
-          trainings: dbPermissions.employees ?? dbPermissions.documents ?? false,
+          dashboard: dbPermissions.dashboard === true,
+          employees: dbPermissions.employees === true,
+          healthCheckups: dbPermissions.healthCheckups === true,
+          documents: dbPermissions.documents === true,
+          reports: dbPermissions.reports === true,
+          audits: dbPermissions.audits === true,
+          settings: dbPermissions.settings === true,
+          // Extended: derive from base permissions - still strict
+          riskAssessments: dbPermissions.riskAssessments === true || dbPermissions.audits === true,
+          investigations: dbPermissions.investigations === true || dbPermissions.audits === true,
+          incidents: dbPermissions.incidents === true || dbPermissions.audits === true,
+          trainings: dbPermissions.trainings === true || dbPermissions.employees === true,
         };
 
+        logRBAC("✅ Final mapped permissions:", mappedPermissions);
         setPermissions(mappedPermissions);
       } else {
-        // Fallback: use default employee permissions
-        setPermissions({
-          ...DEFAULT_PERMISSIONS,
-          dashboard: true,
-          documents: true,
-        });
+        // NO FALLBACK TO PERMISSIVE DEFAULTS - deny all if no role config found
+        logRBAC("⚠️ No custom_roles entry found for role:", assignedRole);
+        logRBAC("⚠️ DENYING ALL - no permissions configured for this role");
+        setPermissions(DEFAULT_PERMISSIONS);
       }
     } catch (error) {
-      console.error("[usePermissions] Error:", error);
+      logRBAC("❌ Exception in fetchPermissions:", error);
+      // On error, deny all
       setPermissions(DEFAULT_PERMISSIONS);
     } finally {
       setLoading(false);
+      logRBAC("=== Permission Resolution Complete ===");
     }
   }, [user, userRole, companyId]);
 
@@ -176,7 +202,10 @@ export function usePermissions() {
       if (userRole === "super_admin" || userRole === "company_admin") {
         return true;
       }
-      return permissions[permission] ?? false;
+      // STRICT: permission must be explicitly true, not just truthy
+      const result = permissions[permission] === true;
+      logRBAC(`hasPermission("${permission}") = ${result}`);
+      return result;
     },
     [permissions, userRole]
   );
@@ -194,11 +223,14 @@ export function usePermissions() {
       const permissionKey = ROUTE_PERMISSION_MAP[basePath];
 
       if (!permissionKey) {
-        // Route not in map - allow access by default (for public routes, etc.)
-        return true;
+        // Route not in map - DENY by default for unmapped routes (safer)
+        logRBAC(`canAccessRoute("${path}") - no mapping found, denying`);
+        return false;
       }
 
-      return permissions[permissionKey] ?? false;
+      const result = permissions[permissionKey] === true;
+      logRBAC(`canAccessRoute("${path}") -> ${permissionKey} = ${result}`);
+      return result;
     },
     [permissions, userRole]
   );

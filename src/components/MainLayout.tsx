@@ -39,9 +39,18 @@ type Props = {
 export default function MainLayout({ children }: Props) {
   const { userRole, signOut, companyName } = useAuth();
   const { language, setLanguage, t } = useLanguage();
-  const { hasPermission, loading: permissionsLoading, roleName } = usePermissions();
+  const { hasPermission, loading: permissionsLoading, roleName, permissions } = usePermissions();
   const location = useLocation();
   const [darkMode, setDarkMode] = useState(false);
+
+  // Log permissions state in dev for debugging
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log("[MainLayout] Permissions loading:", permissionsLoading);
+      console.log("[MainLayout] Role:", roleName);
+      console.log("[MainLayout] Current permissions:", permissions);
+    }
+  }, [permissionsLoading, roleName, permissions]);
 
   useEffect(() => {
     const isDark = localStorage.getItem("darkMode") === "true";
@@ -96,12 +105,21 @@ export default function MainLayout({ children }: Props) {
           </div>
 
           <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-            {hasPermission("dashboard") && (
-              <Link to="/dashboard" className={getLinkClasses("/dashboard")}>
-                <BarChart className="w-4 h-4" />
-                <span>{t("nav.dashboard")}</span>
-              </Link>
-            )}
+            {/* Show loading skeleton while permissions load */}
+            {permissionsLoading ? (
+              <div className="space-y-2 animate-pulse">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="h-9 bg-gray-100 dark:bg-gray-800 rounded-lg" />
+                ))}
+              </div>
+            ) : (
+              <>
+                {hasPermission("dashboard") && (
+                  <Link to="/dashboard" className={getLinkClasses("/dashboard")}>
+                    <BarChart className="w-4 h-4" />
+                    <span>{t("nav.dashboard")}</span>
+                  </Link>
+                )}
 
             {hasPermission("employees") && (
               <Link to="/employees" className={getLinkClasses("/employees")}>
@@ -165,6 +183,8 @@ export default function MainLayout({ children }: Props) {
                   <span>{t("nav.settings")}</span>
                 </Link>
               </div>
+            )}
+              </>
             )}
           </nav>
 
