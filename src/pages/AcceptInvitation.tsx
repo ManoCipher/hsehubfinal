@@ -6,7 +6,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, CheckCircle, XCircle, UserPlus } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, CheckCircle, XCircle, UserPlus, Mail, User, Briefcase, Eye, EyeOff, Shield, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface TokenData {
@@ -37,6 +38,8 @@ export default function AcceptInvitation() {
   
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     async function validateToken() {
@@ -47,49 +50,48 @@ export default function AcceptInvitation() {
       }
 
       try {
-        // Validate token
-        const { data: tokenResult, error: tokenError } = await supabase
-          .from("member_invitation_tokens")
-          .select("team_member_id, expires_at, used_at")
-          .eq("token", token)
-          .single();
+        // Sign out any existing session to ensure clean anonymous access
+        // This prevents issues when someone clicks an invite while logged in as another user
+        await supabase.auth.signOut();
 
-        if (tokenError || !tokenResult) {
-          setError("Invalid invitation link. Please contact your administrator for a new invitation.");
+        // Use the SECURITY DEFINER function to validate token and get member info
+        // This bypasses RLS and works for anonymous users
+        const { data: result, error: rpcError } = await supabase.rpc(
+          "validate_invitation_token",
+          { p_token: token }
+        );
+
+        console.log("[AcceptInvitation] Token validation result:", { result, rpcError });
+
+        if (rpcError) {
+          console.error("[AcceptInvitation] RPC error:", rpcError);
+          setError("Unable to validate invitation. Please ensure you have the correct link or contact your administrator.");
           setLoading(false);
           return;
         }
 
-        // Check if token is expired
-        if (new Date(tokenResult.expires_at) < new Date()) {
-          setError("This invitation has expired. Please contact your administrator for a new invitation.");
+        if (!result || !result.valid) {
+          setError(result?.error || "Invalid invitation link. Please contact your administrator for a new invitation.");
           setLoading(false);
           return;
         }
 
-        // Check if token was already used
-        if (tokenResult.used_at) {
-          setError("This invitation has already been used. If you need help accessing your account, please contact your administrator.");
-          setLoading(false);
-          return;
-        }
+        // Set token data from the RPC result
+        setTokenData({
+          team_member_id: result.team_member_id,
+          expires_at: "", // Not needed since validation passed
+          used_at: null,
+        });
 
-        setTokenData(tokenResult);
+        // Set member data from the RPC result
+        setMemberData({
+          first_name: result.first_name,
+          last_name: result.last_name,
+          email: result.email,
+          company_id: result.company_id,
+          role: result.role,
+        });
 
-        // Get member info
-        const { data: member, error: memberError } = await supabase
-          .from("team_members")
-          .select("first_name, last_name, email, company_id, role")
-          .eq("id", tokenResult.team_member_id)
-          .single();
-
-        if (memberError || !member) {
-          setError("Could not find your member information. Please contact your administrator.");
-          setLoading(false);
-          return;
-        }
-
-        setMemberData(member);
         setLoading(false);
       } catch (err) {
         console.error("Error validating invitation:", err);
@@ -156,17 +158,30 @@ export default function AcceptInvitation() {
         throw authError;
       }
 
-      // Mark token as used
-      await supabase
-        .from("member_invitation_tokens")
-        .update({ used_at: new Date().toISOString() })
-        .eq("token", token);
+      // Get the new user's ID
+      const newUserId = authData.user?.id;
+      if (!newUserId) {
+        throw new Error("Failed to get user ID after signup");
+      }
 
-      // Update team member status to active
-      await supabase
-        .from("team_members")
-        .update({ status: "active" })
-        .eq("id", tokenData.team_member_id);
+      // Call the accept_team_invitation function to handle all the database updates
+      // This function runs with elevated privileges to bypass RLS
+      const { data: acceptResult, error: acceptError } = await supabase.rpc(
+        "accept_team_invitation",
+        {
+          p_token: token,
+          p_user_id: newUserId,
+        }
+      );
+
+      if (acceptError) {
+        console.error("Error accepting invitation:", acceptError);
+        throw new Error("Failed to complete invitation acceptance");
+      }
+
+      if (!acceptResult?.success) {
+        throw new Error(acceptResult?.error || "Failed to accept invitation");
+      }
 
       setSuccess(true);
       
@@ -192,144 +207,292 @@ export default function AcceptInvitation() {
     }
   };
 
+  // Shared wrapper elements as variables (not components)
+  const backgroundElements = (
+    <>
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-1/4 -right-1/4 w-1/2 h-1/2 bg-gradient-to-br from-blue-400/10 to-green-400/10 rounded-full blur-3xl" />
+        <div className="absolute -bottom-1/4 -left-1/4 w-1/2 h-1/2 bg-gradient-to-tr from-green-400/10 to-blue-400/10 rounded-full blur-3xl" />
+      </div>
+      <div className="relative z-10 mb-8 text-center">
+        <div className="relative inline-block">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-green-600/20 blur-2xl rounded-full scale-150" />
+          <div className="relative bg-white/80 backdrop-blur-sm p-4 rounded-2xl shadow-lg border border-white/50">
+            <Shield className="w-12 h-12 text-primary" />
+          </div>
+        </div>
+        <h1 className="mt-4 text-2xl font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
+          HSE Hub
+        </h1>
+        <p className="text-sm text-muted-foreground">Health, Safety & Environment Management</p>
+      </div>
+    </>
+  );
+
+  const backToLoginButton = (
+    <div className="relative z-10 mt-6">
+      <Button 
+        variant="ghost" 
+        className="text-muted-foreground hover:text-primary"
+        onClick={() => navigate("/auth")}
+      >
+        <ArrowLeft className="w-4 h-4 mr-2" />
+        Back to Login
+      </Button>
+    </div>
+  );
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="text-center">
-          <Loader2 className="w-10 h-10 animate-spin mx-auto mb-4 text-primary" />
-          <p className="text-muted-foreground">Validating your invitation...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-primary/5 via-background to-success/5 p-4 relative overflow-hidden">
+        {backgroundElements}
+        <div className="relative z-10 w-full max-w-md">
+          <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+            <CardContent className="pt-8 pb-8">
+              <div className="text-center">
+                <div className="relative inline-block">
+                  <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full animate-pulse" />
+                  <Loader2 className="relative w-12 h-12 animate-spin text-primary" />
+                </div>
+                <h2 className="mt-4 text-lg font-semibold text-foreground">Validating Your Invitation</h2>
+                <p className="mt-2 text-muted-foreground text-sm">Please wait while we verify your invitation link...</p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
+        {backToLoginButton}
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-orange-100 p-4">
-        <Card className="max-w-md w-full">
-          <CardHeader className="text-center">
-            <XCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
-            <CardTitle className="text-destructive">Invitation Invalid</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-            <div className="mt-6 text-center">
-              <Button variant="outline" onClick={() => navigate("/auth")}>
-                Go to Login
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-primary/5 via-background to-success/5 p-4 relative overflow-hidden">
+        {backgroundElements}
+        <div className="relative z-10 w-full max-w-md">
+          <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm overflow-hidden">
+            <div className="h-2 bg-gradient-to-r from-red-500 to-orange-500" />
+            <CardHeader className="text-center pb-4">
+              <div className="relative inline-block mx-auto">
+                <div className="absolute inset-0 bg-red-500/20 blur-xl rounded-full" />
+                <div className="relative bg-red-50 p-4 rounded-full">
+                  <XCircle className="w-10 h-10 text-red-500" />
+                </div>
+              </div>
+              <CardTitle className="mt-4 text-xl text-red-600">Invitation Invalid</CardTitle>
+              <CardDescription>We couldn't verify your invitation</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert variant="destructive" className="border-red-200 bg-red-50">
+                <XCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+              <div className="text-center space-y-3 pt-2">
+                <p className="text-sm text-muted-foreground">
+                  The invitation link may have expired or already been used.
+                </p>
+                <Button 
+                  onClick={() => navigate("/auth")}
+                  className="bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700"
+                >
+                  Go to Login
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+        {backToLoginButton}
       </div>
     );
   }
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100 p-4">
-        <Card className="max-w-md w-full">
-          <CardHeader className="text-center">
-            <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
-            <CardTitle className="text-green-700">Welcome to HSE Hub!</CardTitle>
-            <CardDescription>
-              Your account has been created successfully.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-center">
-            <p className="text-muted-foreground mb-4">
-              Redirecting you to the login page...
-            </p>
-            <Button onClick={() => navigate("/auth")}>
-              Go to Login Now
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-primary/5 via-background to-success/5 p-4 relative overflow-hidden">
+        {backgroundElements}
+        <div className="relative z-10 w-full max-w-md">
+          <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm overflow-hidden">
+            <div className="h-2 bg-gradient-to-r from-green-500 to-emerald-500" />
+            <CardHeader className="text-center pb-4">
+              <div className="relative inline-block mx-auto">
+                <div className="absolute inset-0 bg-green-500/20 blur-xl rounded-full animate-pulse" />
+                <div className="relative bg-green-50 p-4 rounded-full">
+                  <CheckCircle className="w-10 h-10 text-green-500" />
+                </div>
+              </div>
+              <CardTitle className="mt-4 text-xl bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+                Welcome to HSE Hub!
+              </CardTitle>
+              <CardDescription>Your account has been created successfully</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 text-center">
+              <div className="p-4 bg-green-50 rounded-lg border border-green-100">
+                <p className="text-sm text-green-700">
+                  ✨ You're all set! You can now access all the features assigned to your role.
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-2 text-muted-foreground text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Redirecting to login page...</span>
+              </div>
+              <Button 
+                onClick={() => navigate("/auth")}
+                className="bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700"
+              >
+                Go to Login Now
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+        {backToLoginButton}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <Card className="max-w-md w-full">
-        <CardHeader className="text-center">
-          <UserPlus className="w-12 h-12 text-primary mx-auto mb-4" />
-          <CardTitle>Accept Your Invitation</CardTitle>
-          <CardDescription>
-            Welcome, {memberData?.first_name}! Set up your password to join HSE Hub.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-6 p-4 bg-muted rounded-lg">
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <span className="text-muted-foreground">Name:</span>
-              <span className="font-medium">{memberData?.first_name} {memberData?.last_name}</span>
-              <span className="text-muted-foreground">Email:</span>
-              <span className="font-medium">{memberData?.email}</span>
-              <span className="text-muted-foreground">Role:</span>
-              <span className="font-medium">{memberData?.role}</span>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-primary/5 via-background to-success/5 p-4 relative overflow-hidden">
+      {backgroundElements}
+      <div className="relative z-10 w-full max-w-md">
+        <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm overflow-hidden">
+          <div className="h-2 bg-gradient-to-r from-blue-600 to-green-600" />
+          <CardHeader className="text-center pb-4">
+            <div className="relative inline-block mx-auto">
+              <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full" />
+              <div className="relative bg-primary/10 p-4 rounded-full">
+                <UserPlus className="w-10 h-10 text-primary" />
+              </div>
             </div>
-          </div>
+            <CardTitle className="mt-4 text-xl bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
+              Accept Your Invitation
+            </CardTitle>
+            <CardDescription>
+              Welcome! Set up your password to join the team.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* User Info Card */}
+            <div className="p-4 bg-gradient-to-br from-blue-50 to-green-50 rounded-xl border border-blue-100/50">
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white rounded-lg shadow-sm">
+                    <User className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Full Name</p>
+                    <p className="font-medium text-foreground">{memberData?.first_name} {memberData?.last_name}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white rounded-lg shadow-sm">
+                    <Mail className="w-4 h-4 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Email Address</p>
+                    <p className="font-medium text-foreground">{memberData?.email}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white rounded-lg shadow-sm">
+                    <Briefcase className="w-4 h-4 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Your Role</p>
+                    <Badge variant="secondary" className="mt-0.5 bg-gradient-to-r from-blue-100 to-green-100 text-blue-700 border-0">
+                      {memberData?.role}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-          <form onSubmit={handleAcceptInvitation} className="space-y-4">
-            <div>
-              <Label htmlFor="password">Create Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Must be at least 6 characters
+            {/* Password Form */}
+            <form onSubmit={handleAcceptInvitation} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-sm font-medium">Create Password</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    className="pr-10 bg-white border-gray-200 focus:border-primary h-11"
+                  />
+                  <span 
+                    className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer select-none"
+                    onClick={() => setShowPassword(!showPassword)}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                    ) : (
+                      <Eye className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                    )}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Shield className="w-3 h-3" />
+                  Must be at least 6 characters
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword" className="text-sm font-medium">Confirm Password</Label>
+                <div className="relative">
+                  <Input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Confirm your password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    className="pr-10 bg-white border-gray-200 focus:border-primary h-11"
+                  />
+                  <span 
+                    className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer select-none"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                    ) : (
+                      <Eye className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              <Button 
+                type="submit" 
+                className="w-full bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 shadow-lg shadow-blue-500/25 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/30" 
+                disabled={submitting}
+                size="lg"
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Creating Your Account...
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    Create Account & Join Team
+                  </>
+                )}
+              </Button>
+            </form>
+
+            <div className="text-center pt-2">
+              <p className="text-xs text-muted-foreground">
+                By creating an account, you agree to our terms of service and privacy policy.
               </p>
             </div>
-
-            <div>
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                placeholder="Confirm your password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-              />
-            </div>
-
-            <Button 
-              type="submit" 
-              className="w-full" 
-              disabled={submitting}
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Creating Account...
-                </>
-              ) : (
-                <>
-                  <UserPlus className="w-4 h-4 mr-2" />
-                  Create Account & Join
-                </>
-              )}
-            </Button>
-          </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-sm text-muted-foreground">
-              Already have an account?{" "}
-              <Button variant="link" className="p-0 h-auto" onClick={() => navigate("/auth")}>
-                Log in here
-              </Button>
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
+      {backToLoginButton}
     </div>
   );
 }
