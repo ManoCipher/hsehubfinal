@@ -17,6 +17,10 @@ import {
   ChevronDown,
   Building2,
   Globe,
+  Package,
+  Puzzle,
+  LayoutDashboard,
+  BarChart3,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -181,6 +185,35 @@ export default function MainLayout({ children }: Props) {
                 <Link to="/settings" className={getLinkClasses("/settings")}>
                   <Settings className="w-4 h-4" />
                   <span>{t("nav.settings")}</span>
+                </Link>
+              </div>
+            )}
+
+            {/* Super Admin Menu */}
+            {userRole === "super_admin" && (
+              <div className="pt-3 mt-3 border-t border-gray-200 dark:border-gray-800">
+                <p className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Super Admin
+                </p>
+                <Link to="/super-admin/dashboard" className={getLinkClasses("/super-admin/dashboard")}>
+                  <LayoutDashboard className="w-4 h-4" />
+                  <span>Dashboard</span>
+                </Link>
+                <Link to="/super-admin/companies" className={getLinkClasses("/super-admin/companies")}>
+                  <Building2 className="w-4 h-4" />
+                  <span>Companies</span>
+                </Link>
+                <Link to="/super-admin/subscriptions" className={getLinkClasses("/super-admin/subscriptions")}>
+                  <Package className="w-4 h-4" />
+                  <span>Subscriptions</span>
+                </Link>
+                <Link to="/super-admin/addons" className={getLinkClasses("/super-admin/addons")}>
+                  <Puzzle className="w-4 h-4" />
+                  <span>Add-ons</span>
+                </Link>
+                <Link to="/super-admin/analytics" className={getLinkClasses("/super-admin/analytics")}>
+                  <BarChart3 className="w-4 h-4" />
+                  <span>Analytics</span>
                 </Link>
               </div>
             )}

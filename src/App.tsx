@@ -32,6 +32,9 @@ import Reports from "./pages/Reports";
 import CompanyRegistration from "./pages/CompanyRegistration";
 import SuperAdminDashboard from "./pages/SuperAdmin/Dashboard";
 import SuperAdminCompanies from "./pages/SuperAdmin/Companies";
+import SuperAdminSubscriptions from "./pages/SuperAdmin/Subscriptions";
+import SuperAdminAddons from "./pages/SuperAdmin/Addons";
+import SuperAdminAnalytics from "./pages/SuperAdmin/Analytics";
 import AuthDebug from "./pages/AuthDebug";
 import NotFound from "./pages/NotFound";
 import PublicNotes from "./pages/PublicNotes";
@@ -68,6 +71,30 @@ const App = () => (
                 element={
                   <MainLayout>
                     <SuperAdminCompanies />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/super-admin/subscriptions"
+                element={
+                  <MainLayout>
+                    <SuperAdminSubscriptions />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/super-admin/addons"
+                element={
+                  <MainLayout>
+                    <SuperAdminAddons />
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/super-admin/analytics"
+                element={
+                  <MainLayout>
+                    <SuperAdminAnalytics />
                   </MainLayout>
                 }
               />
