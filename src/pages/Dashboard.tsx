@@ -443,38 +443,13 @@ export default function Dashboard() {
 
       {userRole === "super_admin" ? (
         <>
-          {/* Redirect super admin to their dashboard */}
+          {/* Redirect super admin to their dashboard and don't show any UI */}
           {typeof window !== "undefined" &&
             window.location.pathname === "/dashboard" &&
-            navigate("/super-admin/dashboard")}
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>{t("superadmin.dashboard")}</CardTitle>
-                <CardDescription>
-                  {t("superadmin.manageSubscriptions")}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <Button
-                    onClick={() => navigate("/super-admin/companies")}
-                    className="w-full justify-start"
-                  >
-                    <Users className="w-4 h-4 mr-2" />
-                    {t("superadmin.manageCompanies")}
-                  </Button>
-                  <Button
-                    onClick={() => navigate("/super-admin/dashboard")}
-                    className="w-full justify-start"
-                    variant="outline"
-                  >
-                    <BarChart className="w-4 h-4 mr-2" />
-                    {t("superadmin.viewAnalytics")}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            navigate("/super-admin/dashboard", { replace: true })}
+          {/* Don't render anything for super admin on /dashboard route */}
+          <div className="flex items-center justify-center min-h-[50vh]">
+            <p className="text-muted-foreground">Redirecting to Super Admin Dashboard...</p>
           </div>
         </>
       ) : (
