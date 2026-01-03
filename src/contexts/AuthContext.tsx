@@ -243,6 +243,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    // Clear super admin PIN verification
+    sessionStorage.removeItem("superAdminPinVerified");
+    
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
     setUserRole(null);
