@@ -111,27 +111,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchCompanyContextViaTables = async (userId: string) => {
     console.warn("[AuthContext] Falling back to direct company lookup");
+    
+    // Use .select() with order to prioritize super_admin and handle duplicates
     const { data, error } = await supabase
       .from("user_roles")
       .select("role, company_id")
       .eq("user_id", userId)
-      .maybeSingle();
+      .order("created_at", { ascending: true })
+      .limit(10);  // Get all roles, then pick the best one
 
     if (error) {
       throw error;
     }
 
-    setUserRole((data?.role as UserRole) ?? null);
-    setCompanyId(data?.company_id ?? null);
+    // Find the best role - prioritize super_admin
+    let bestRole: UserRole | null = null;
+    let bestCompanyId: string | null = null;
+
+    if (data && data.length > 0) {
+      // Check for super_admin first
+      const superAdminRole = data.find(r => r.role === 'super_admin');
+      if (superAdminRole) {
+        bestRole = 'super_admin';
+        bestCompanyId = superAdminRole.company_id;
+      } else {
+        // Otherwise use first available role
+        bestRole = (data[0]?.role as UserRole) ?? null;
+        bestCompanyId = data[0]?.company_id ?? null;
+      }
+    }
+
+    console.log("[AuthContext] Resolved role:", bestRole, "company:", bestCompanyId);
     
-    // Fetch company name
-    if (data?.company_id) {
+    setUserRole(bestRole);
+    setCompanyId(bestCompanyId);
+    
+    // Fetch company name (super_admin might not have a company)
+    if (bestCompanyId) {
       const { data: companyData } = await supabase
         .from("companies")
         .select("name")
-        .eq("id", data.company_id)
+        .eq("id", bestCompanyId)
         .single();
       setCompanyName(companyData?.name ?? null);
+    } else if (bestRole === 'super_admin') {
+      // Super admin without company - set a placeholder name
+      setCompanyName("Platform Admin");
     }
     
     setLoading(false);
@@ -151,10 +176,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (data?.success) {
       console.log("[AuthContext] Company context loaded via RPC", data);
-      setUserRole((data.role as UserRole) ?? "company_admin");
+      const role = (data.role as UserRole) ?? "company_admin";
+      setUserRole(role);
       setCompanyId(data.company_id ?? null);
       
-      // Fetch company name
+      // Fetch company name or set placeholder for super_admin
       if (data.company_id) {
         const { data: companyData } = await supabase
           .from("companies")
@@ -162,6 +188,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .eq("id", data.company_id)
           .single();
         setCompanyName(companyData?.name ?? null);
+      } else if (role === 'super_admin') {
+        // Super admin without company - set a placeholder name
+        setCompanyName("Platform Admin");
       }
       
       setLoading(false);
@@ -214,6 +243,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    // Clear super admin PIN verification
+    sessionStorage.removeItem("superAdminPinVerified");
+    
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
     setUserRole(null);

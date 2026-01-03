@@ -67,7 +67,7 @@ export default function FileUploadZone({
       {
         cloudName: cloudName,
         uploadPreset: uploadPreset,
-        sources: ["local", "url", "camera", "google_drive"],
+        sources: ["local", "google_drive"],
         multiple: false,
         resourceType: resourceType,
         clientAllowedFormats: allowedFormats,

@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
+import ProtectedRoute from "./components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -31,11 +32,16 @@ import Reports from "./pages/Reports";
 import CompanyRegistration from "./pages/CompanyRegistration";
 import SuperAdminDashboard from "./pages/SuperAdmin/Dashboard";
 import SuperAdminCompanies from "./pages/SuperAdmin/Companies";
+import SuperAdminSubscriptions from "./pages/SuperAdmin/Subscriptions";
+import SuperAdminAddons from "./pages/SuperAdmin/Addons";
+import SuperAdminAnalytics from "./pages/SuperAdmin/Analytics";
+import SuperAdminPinVerification from "./pages/SuperAdmin/PinVerification";
 import AuthDebug from "./pages/AuthDebug";
 import NotFound from "./pages/NotFound";
 import PublicNotes from "./pages/PublicNotes";
 import AcceptInvitation from "./pages/AcceptInvitation";
 import MainLayout from "./components/MainLayout";
+import SuperAdminRoute from "./components/SuperAdminRoute";
 
 const queryClient = new QueryClient();
 
@@ -53,21 +59,65 @@ const App = () => (
               <Route path="/register" element={<CompanyRegistration />} />
               <Route path="/auth-debug" element={<AuthDebug />} />
 
-              {/* Super Admin Pages */}
+              {/* Super Admin PIN Verification */}
+              <Route
+                path="/super-admin/verify"
+                element={
+                  <ProtectedRoute requiredRole="super_admin">
+                    <SuperAdminPinVerification />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Super Admin Pages - Protected with PIN */}
               <Route
                 path="/super-admin/dashboard"
                 element={
-                  <MainLayout>
-                    <SuperAdminDashboard />
-                  </MainLayout>
+                  <SuperAdminRoute>
+                    <MainLayout>
+                      <SuperAdminDashboard />
+                    </MainLayout>
+                  </SuperAdminRoute>
                 }
               />
               <Route
                 path="/super-admin/companies"
                 element={
-                  <MainLayout>
-                    <SuperAdminCompanies />
-                  </MainLayout>
+                  <SuperAdminRoute>
+                    <MainLayout>
+                      <SuperAdminCompanies />
+                    </MainLayout>
+                  </SuperAdminRoute>
+                }
+              />
+              <Route
+                path="/super-admin/subscriptions"
+                element={
+                  <SuperAdminRoute>
+                    <MainLayout>
+                      <SuperAdminSubscriptions />
+                    </MainLayout>
+                  </SuperAdminRoute>
+                }
+              />
+              <Route
+                path="/super-admin/addons"
+                element={
+                  <SuperAdminRoute>
+                    <MainLayout>
+                      <SuperAdminAddons />
+                    </MainLayout>
+                  </SuperAdminRoute>
+                }
+              />
+              <Route
+                path="/super-admin/analytics"
+                element={
+                  <SuperAdminRoute>
+                    <MainLayout>
+                      <SuperAdminAnalytics />
+                    </MainLayout>
+                  </SuperAdminRoute>
                 }
               />
 
@@ -76,7 +126,9 @@ const App = () => (
                 path="/dashboard"
                 element={
                   <MainLayout>
-                    <Dashboard />
+                    <ProtectedRoute requiredPermission="dashboard">
+                      <Dashboard />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -84,7 +136,9 @@ const App = () => (
                 path="/setup-company"
                 element={
                   <MainLayout>
-                    <SetupCompany />
+                    <ProtectedRoute>
+                      <SetupCompany />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -92,7 +146,9 @@ const App = () => (
                 path="/employees"
                 element={
                   <MainLayout>
-                    <Employees />
+                    <ProtectedRoute requiredPermission="employees">
+                      <Employees />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -100,7 +156,9 @@ const App = () => (
                 path="/employees/:id"
                 element={
                   <MainLayout>
-                    <EmployeeProfile />
+                    <ProtectedRoute requiredPermission="employees">
+                      <EmployeeProfile />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -108,7 +166,9 @@ const App = () => (
                 path="/activity-groups"
                 element={
                   <MainLayout>
-                    <ActivityGroups />
+                    <ProtectedRoute requiredPermission="riskAssessments">
+                      <ActivityGroups />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -116,7 +176,9 @@ const App = () => (
                 path="/risk-assessments"
                 element={
                   <MainLayout>
-                    <RiskAssessments />
+                    <ProtectedRoute requiredPermission="riskAssessments">
+                      <RiskAssessments />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -124,7 +186,9 @@ const App = () => (
                 path="/measures"
                 element={
                   <MainLayout>
-                    <Measures />
+                    <ProtectedRoute requiredPermission="riskAssessments">
+                      <Measures />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -132,7 +196,9 @@ const App = () => (
                 path="/audits"
                 element={
                   <MainLayout>
-                    <Audits />
+                    <ProtectedRoute requiredPermission="audits">
+                      <Audits />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -140,7 +206,9 @@ const App = () => (
                 path="/audits/:id"
                 element={
                   <MainLayout>
-                    <AuditDetails />
+                    <ProtectedRoute requiredPermission="audits">
+                      <AuditDetails />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -148,7 +216,9 @@ const App = () => (
                 path="/tasks"
                 element={
                   <MainLayout>
-                    <Tasks />
+                    <ProtectedRoute requiredPermission="dashboard">
+                      <Tasks />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -156,7 +226,9 @@ const App = () => (
                 path="/training"
                 element={
                   <MainLayout>
-                    <Training />
+                    <ProtectedRoute requiredPermission="trainings">
+                      <Training />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -164,7 +236,9 @@ const App = () => (
                 path="/training/:courseId"
                 element={
                   <MainLayout>
-                    <Training />
+                    <ProtectedRoute requiredPermission="trainings">
+                      <Training />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -172,7 +246,9 @@ const App = () => (
                 path="/training/:courseId/lesson/:lessonId"
                 element={
                   <MainLayout>
-                    <LessonEditor />
+                    <ProtectedRoute requiredPermission="trainings">
+                      <LessonEditor />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -180,7 +256,9 @@ const App = () => (
                 path="/training/:courseId/lesson/:lessonId/view"
                 element={
                   <MainLayout>
-                    <LessonViewer />
+                    <ProtectedRoute requiredPermission="trainings">
+                      <LessonViewer />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -188,7 +266,9 @@ const App = () => (
                 path="/incidents"
                 element={
                   <MainLayout>
-                    <Incidents />
+                    <ProtectedRoute requiredPermission="incidents">
+                      <Incidents />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -196,7 +276,9 @@ const App = () => (
                 path="/investigations"
                 element={
                   <MainLayout>
-                    <Investigations />
+                    <ProtectedRoute requiredPermission="investigations">
+                      <Investigations />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -204,7 +286,9 @@ const App = () => (
                 path="/messages"
                 element={
                   <MainLayout>
-                    <Messages />
+                    <ProtectedRoute requiredPermission="dashboard">
+                      <Messages />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -212,7 +296,9 @@ const App = () => (
                 path="/documents"
                 element={
                   <MainLayout>
-                    <Documents />
+                    <ProtectedRoute requiredPermission="documents">
+                      <Documents />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -220,7 +306,9 @@ const App = () => (
                 path="/reports"
                 element={
                   <MainLayout>
-                    <Reports />
+                    <ProtectedRoute requiredPermission="reports">
+                      <Reports />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -228,7 +316,9 @@ const App = () => (
                 path="/settings"
                 element={
                   <MainLayout>
-                    <Settings />
+                    <ProtectedRoute requiredPermission="settings">
+                      <Settings />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -236,7 +326,9 @@ const App = () => (
                 path="/profile"
                 element={
                   <MainLayout>
-                    <Profile />
+                    <ProtectedRoute requiredPermission="dashboard">
+                      <Profile />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />
@@ -244,7 +336,9 @@ const App = () => (
                 path="/invoices"
                 element={
                   <MainLayout>
-                    <Invoices />
+                    <ProtectedRoute requiredPermission="dashboard">
+                      <Invoices />
+                    </ProtectedRoute>
                   </MainLayout>
                 }
               />

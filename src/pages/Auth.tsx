@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -19,21 +19,41 @@ export default function Auth() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const { signIn } = useAuth();
+  const [redirecting, setRedirecting] = useState(false);
+  const { signIn, userRole, loading } = useAuth();
   const navigate = useNavigate();
+
+  // Redirect based on role after successful login
+  useEffect(() => {
+    if (loading || !userRole) return;
+    
+    if (userRole === "super_admin") {
+      // Clear any previous PIN verification
+      sessionStorage.removeItem("superAdminPinVerified");
+      setRedirecting(true);
+      // Redirect to PIN verification page immediately
+      navigate("/super-admin/verify", { replace: true });
+    } else if (redirecting) {
+      // For regular users, go to dashboard after sign in
+      navigate("/dashboard", { replace: true });
+    }
+  }, [userRole, loading, navigate, redirecting]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setRedirecting(false);
     try {
       await signIn(loginEmail, loginPassword);
       toast.success("Signed in successfully");
-      navigate("/dashboard");
+      setRedirecting(true);
+      // Navigation will be handled by useEffect based on role
     } catch (err: unknown) {
       const e = err as { message?: string } | Error | null;
       const message =
         e && "message" in e && e.message ? e.message : String(err);
       toast.error(message || "Failed to sign in");
+      setRedirecting(false);
     } finally {
       setIsLoading(false);
     }
