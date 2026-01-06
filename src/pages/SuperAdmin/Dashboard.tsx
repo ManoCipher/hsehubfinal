@@ -270,7 +270,7 @@ export default function SuperAdminDashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
         <Link to="/super-admin/companies">
           <Card className="hover:shadow-md transition-shadow cursor-pointer border-dashed">
             <CardContent className="flex items-center gap-4 p-4">
@@ -280,6 +280,20 @@ export default function SuperAdminDashboard() {
               <div>
                 <p className="font-medium">Companies</p>
                 <p className="text-xs text-muted-foreground">Manage all companies</p>
+              </div>
+              <ArrowUpRight className="w-4 h-4 ml-auto text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/super-admin/users">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border-dashed">
+            <CardContent className="flex items-center gap-4 p-4">
+              <div className="w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                <Users className="h-5 w-5 text-indigo-600" />
+              </div>
+              <div>
+                <p className="font-medium">Users</p>
+                <p className="text-xs text-muted-foreground">Global user directory</p>
               </div>
               <ArrowUpRight className="w-4 h-4 ml-auto text-muted-foreground" />
             </CardContent>
@@ -322,6 +336,20 @@ export default function SuperAdminDashboard() {
               <div>
                 <p className="font-medium">Analytics</p>
                 <p className="text-xs text-muted-foreground">View detailed reports</p>
+              </div>
+              <ArrowUpRight className="w-4 h-4 ml-auto text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </Link>
+        <Link to="/super-admin/audit-logs">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer border-dashed">
+            <CardContent className="flex items-center gap-4 p-4">
+              <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <FileText className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <p className="font-medium">Audit Logs</p>
+                <p className="text-xs text-muted-foreground">Security & activity</p>
               </div>
               <ArrowUpRight className="w-4 h-4 ml-auto text-muted-foreground" />
             </CardContent>
@@ -461,11 +489,11 @@ export default function SuperAdminDashboard() {
               ) : (
                 expiringTrials.map((company) => {
                   const createdDate = new Date(company.created_at);
-                  const trialEndDate = company.trial_ends_at 
+                  const trialEndDate = company.trial_ends_at
                     ? new Date(company.trial_ends_at)
                     : new Date(createdDate.getTime() + 7 * 24 * 60 * 60 * 1000);
                   const daysLeft = Math.max(0, Math.ceil((trialEndDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
-                  
+
                   return (
                     <div
                       key={company.id}
@@ -536,8 +564,8 @@ export default function SuperAdminDashboard() {
                         company.subscription_status === "active"
                           ? "default"
                           : company.subscription_status === "trial"
-                          ? "secondary"
-                          : "outline"
+                            ? "secondary"
+                            : "outline"
                       }
                     >
                       {company.subscription_tier}
@@ -547,8 +575,8 @@ export default function SuperAdminDashboard() {
                         company.subscription_status === "active"
                           ? "default"
                           : company.subscription_status === "trial"
-                          ? "secondary"
-                          : "destructive"
+                            ? "secondary"
+                            : "destructive"
                       }
                     >
                       {company.subscription_status}

@@ -37,14 +37,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     console.log("[AuthContext] Initializing auth state...");
-    
+
     // Set up auth state listener (robust unsubscribe and null checks)
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
       console.log(`[AuthContext] Auth state changed: ${event}`, {
         hasUser: !!session?.user,
         userEmail: session?.user?.email,
       });
-      
+
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           hasSession: !!session,
           userEmail: session?.user?.email,
         });
-        
+
         setSession(session);
         setUser(session?.user ?? null);
 
@@ -111,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchCompanyContextViaTables = async (userId: string) => {
     console.warn("[AuthContext] Falling back to direct company lookup");
-    
+
     // Use .select() with order to prioritize super_admin and handle duplicates
     const { data, error } = await supabase
       .from("user_roles")
@@ -142,10 +142,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     console.log("[AuthContext] Resolved role:", bestRole, "company:", bestCompanyId);
-    
+
     setUserRole(bestRole);
     setCompanyId(bestCompanyId);
-    
+
     // Fetch company name (super_admin might not have a company)
     if (bestCompanyId) {
       const { data: companyData } = await supabase
@@ -158,7 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Super admin without company - set a placeholder name
       setCompanyName("Platform Admin");
     }
-    
+
     setLoading(false);
   };
 
@@ -179,7 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const role = (data.role as UserRole) ?? "company_admin";
       setUserRole(role);
       setCompanyId(data.company_id ?? null);
-      
+
       // Fetch company name or set placeholder for super_admin
       if (data.company_id) {
         const { data: companyData } = await supabase
@@ -192,7 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Super admin without company - set a placeholder name
         setCompanyName("Platform Admin");
       }
-      
+
       setLoading(false);
       return true;
     }
@@ -200,14 +200,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return false;
   };
 
+  const updateLastLogin = async (userId: string) => {
+    try {
+      // Update last login timestamp
+      await supabase
+        .from("user_roles")
+        .update({ last_login_at: new Date().toISOString() })
+        .eq("user_id", userId);
+
+      console.log("[AuthContext] Updated last_login_at for user:", userId);
+
+      // Create audit log entry for login
+      try {
+        await supabase.rpc("create_audit_log", {
+          p_action_type: "login",
+          p_target_type: "user",
+          p_target_id: userId,
+          p_target_name: user?.email || "Unknown User",
+          p_details: {
+            timestamp: new Date().toISOString(),
+            user_agent: navigator.userAgent,
+          },
+          p_company_id: null,
+        });
+        console.log("[AuthContext] Created audit log for login");
+      } catch (auditError) {
+        console.error("[AuthContext] Failed to create audit log:", auditError);
+        // Don't throw - audit logging is not critical for auth flow
+      }
+    } catch (error) {
+      console.error("[AuthContext] Failed to update last_login_at:", error);
+      // Don't throw - this is not critical for auth flow
+    }
+  };
+
   const fetchUserRole = async (userId: string, retryCount = 0) => {
     try {
       console.log(`[AuthContext] Fetching user role for ${userId}, attempt ${retryCount + 1}`);
 
       const rpcHandled = await fetchCompanyContextViaRpc();
-      if (rpcHandled) return;
+      if (rpcHandled) {
+        // Update last login after successful role fetch
+        await updateLastLogin(userId);
+        return;
+      }
 
       await fetchCompanyContextViaTables(userId);
+      // Update last login after successful role fetch
+      await updateLastLogin(userId);
     } catch (error) {
       console.error("[AuthContext] Error fetching user role:", error);
       if (retryCount < 3) {
@@ -245,7 +285,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     // Clear super admin PIN verification
     sessionStorage.removeItem("superAdminPinVerified");
-    
+
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
     setUserRole(null);

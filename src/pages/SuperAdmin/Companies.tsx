@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -254,13 +254,14 @@ export default function SuperAdminCompanies() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setSelectedCompany(company)}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
+                          <Link to={`/super-admin/companies/${company.id}`}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          </Link>
                           <Button
                             variant="ghost"
                             size="icon"

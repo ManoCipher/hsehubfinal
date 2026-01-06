@@ -36,6 +36,11 @@ import SuperAdminSubscriptions from "./pages/SuperAdmin/Subscriptions";
 import SuperAdminAddons from "./pages/SuperAdmin/Addons";
 import SuperAdminAnalytics from "./pages/SuperAdmin/Analytics";
 import SuperAdminPinVerification from "./pages/SuperAdmin/PinVerification";
+import SuperAdminCompanyDetail from "./pages/SuperAdmin/CompanyDetail";
+import SuperAdminUsers from "./pages/SuperAdmin/Users";
+import SuperAdminAuditLogs from "./pages/SuperAdmin/AuditLogs";
+import SuperAdminSupport from "./pages/SuperAdmin/Support";
+import SuperAdminSystemHealth from "./pages/SuperAdmin/SystemHealth";
 import AuthDebug from "./pages/AuthDebug";
 import NotFound from "./pages/NotFound";
 import PublicNotes from "./pages/PublicNotes";
@@ -116,6 +121,56 @@ const App = () => (
                   <SuperAdminRoute>
                     <MainLayout>
                       <SuperAdminAnalytics />
+                    </MainLayout>
+                  </SuperAdminRoute>
+                }
+              />
+              <Route
+                path="/super-admin/companies/:id"
+                element={
+                  <SuperAdminRoute>
+                    <MainLayout>
+                      <SuperAdminCompanyDetail />
+                    </MainLayout>
+                  </SuperAdminRoute>
+                }
+              />
+              <Route
+                path="/super-admin/users"
+                element={
+                  <SuperAdminRoute>
+                    <MainLayout>
+                      <SuperAdminUsers />
+                    </MainLayout>
+                  </SuperAdminRoute>
+                }
+              />
+              <Route
+                path="/super-admin/audit-logs"
+                element={
+                  <SuperAdminRoute>
+                    <MainLayout>
+                      <SuperAdminAuditLogs />
+                    </MainLayout>
+                  </SuperAdminRoute>
+                }
+              />
+              <Route
+                path="/super-admin/support"
+                element={
+                  <SuperAdminRoute>
+                    <MainLayout>
+                      <SuperAdminSupport />
+                    </MainLayout>
+                  </SuperAdminRoute>
+                }
+              />
+              <Route
+                path="/super-admin/system-health"
+                element={
+                  <SuperAdminRoute>
+                    <MainLayout>
+                      <SuperAdminSystemHealth />
                     </MainLayout>
                   </SuperAdminRoute>
                 }
