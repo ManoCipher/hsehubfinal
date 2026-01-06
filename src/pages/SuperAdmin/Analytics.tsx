@@ -133,6 +133,19 @@ export default function Analytics() {
     setLoadingData(false);
   };
 
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + " " + sizes[i];
+  };
+
+  const getStoragePercentage = (used: number, limit: number): number => {
+    if (limit === 0) return 0;
+    return Math.min((used / limit) * 100, 100);
+  };
+
   const fetchCompanyUsage = async () => {
     try {
       const { data: companies, error } = await supabase
@@ -144,9 +157,9 @@ export default function Analytics() {
 
       // For each company, get usage counts
       const usagePromises = (companies || []).map(async (company) => {
-        const [employees, documents, courses] = await Promise.all([
+        const [employees, documents, courses, documentStorage] = await Promise.all([
           supabase
-            .from("employees")
+            .from("team_members")
             .select("id", { count: "exact", head: true })
             .eq("company_id", company.id),
           supabase
@@ -157,13 +170,25 @@ export default function Analytics() {
             .from("courses")
             .select("id", { count: "exact", head: true })
             .eq("company_id", company.id),
+          supabase
+            .from("documents")
+            .select("file_size")
+            .eq("company_id", company.id),
         ]);
+
+        // Calculate total storage from documents
+        const totalStorage = (documentStorage.data || []).reduce(
+          (sum, doc: any) => sum + (doc.file_size || 0),
+          0
+        );
 
         return {
           ...company,
           employee_count: employees.count || 0,
           document_count: documents.count || 0,
           course_count: courses.count || 0,
+          storage_used_bytes: totalStorage,
+          storage_limit_bytes: 5368709120, // 5GB default limit
         };
       });
 
@@ -279,18 +304,7 @@ export default function Analytics() {
     }
   };
 
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-  };
 
-  const getStoragePercentage = (used: number, limit: number) => {
-    if (!limit) return 0;
-    return Math.min(100, Math.round((used / limit) * 100));
-  };
 
   if (loading || loadingData) {
     return (
@@ -549,8 +563,8 @@ export default function Analytics() {
                         company.subscription_tier === "premium"
                           ? "bg-amber-100 text-amber-800"
                           : company.subscription_tier === "standard"
-                          ? "bg-purple-100 text-purple-800"
-                          : "bg-blue-100 text-blue-800"
+                            ? "bg-purple-100 text-purple-800"
+                            : "bg-blue-100 text-blue-800"
                       }
                     >
                       {company.subscription_tier}
