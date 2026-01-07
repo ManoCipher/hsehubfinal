@@ -28,14 +28,14 @@ export default function AcceptInvitation() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  
+
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [tokenData, setTokenData] = useState<TokenData | null>(null);
   const [memberData, setMemberData] = useState<MemberData | null>(null);
-  
+
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -105,7 +105,7 @@ export default function AcceptInvitation() {
 
   const handleAcceptInvitation = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!memberData || !tokenData || !token) return;
 
     if (password.length < 6) {
@@ -129,8 +129,36 @@ export default function AcceptInvitation() {
     setSubmitting(true);
 
     try {
-      // Create user account via Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      // Step 1: Clean up any orphaned auth user with this email
+      // This handles cases where user was deleted from DB but auth account remains
+      console.log("[AcceptInvitation] Checking for orphaned auth user...");
+
+      try {
+        const cleanupResponse = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/cleanup-orphaned-user`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({ email: memberData.email }),
+          }
+        );
+
+        const cleanupResult = await cleanupResponse.json();
+        console.log("[AcceptInvitation] Cleanup result:", cleanupResult);
+
+        if (cleanupResult.deleted) {
+          console.log("[AcceptInvitation] Orphaned auth user deleted, proceeding with fresh signup");
+        }
+      } catch (cleanupError) {
+        // Log but don't fail - continue with signup attempt
+        console.warn("[AcceptInvitation] Cleanup check failed, continuing anyway:", cleanupError);
+      }
+
+      // Step 2: Create new user account via Supabase Auth
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: memberData.email,
         password: password,
         options: {
@@ -144,33 +172,25 @@ export default function AcceptInvitation() {
         },
       });
 
-      if (authError) {
-        // Check if user already exists
-        if (authError.message.includes("already registered")) {
-          toast({
-            title: "Account already exists",
-            description: "An account with this email already exists. Please try logging in instead.",
-            variant: "destructive",
-          });
-          setSubmitting(false);
-          return;
-        }
-        throw authError;
+      if (signUpError) {
+        throw signUpError;
       }
 
       // Get the new user's ID
-      const newUserId = authData.user?.id;
-      if (!newUserId) {
+      const userId = signUpData.user?.id;
+      if (!userId) {
         throw new Error("Failed to get user ID after signup");
       }
 
-      // Call the accept_team_invitation function to handle all the database updates
+      console.log("[AcceptInvitation] New user created:", userId);
+
+      // Step 3: Call the accept_team_invitation function to handle all the database updates
       // This function runs with elevated privileges to bypass RLS
       const { data: acceptResult, error: acceptError } = await supabase.rpc(
         "accept_team_invitation",
         {
           p_token: token,
-          p_user_id: newUserId,
+          p_user_id: userId,
         }
       );
 
@@ -184,11 +204,14 @@ export default function AcceptInvitation() {
       }
 
       setSuccess(true);
-      
+
       toast({
-        title: "Account created successfully!",
+        title: "Account setup successful!",
         description: "You can now log in to access HSE Hub.",
       });
+
+      // Sign out the user so they can log in fresh
+      await supabase.auth.signOut();
 
       // Redirect to login after 3 seconds
       setTimeout(() => {
@@ -196,9 +219,9 @@ export default function AcceptInvitation() {
       }, 3000);
 
     } catch (err: any) {
-      console.error("Error creating account:", err);
+      console.error("Error setting up account:", err);
       toast({
-        title: "Error creating account",
+        title: "Error setting up account",
         description: err.message || "An error occurred. Please try again.",
         variant: "destructive",
       });
@@ -231,8 +254,8 @@ export default function AcceptInvitation() {
 
   const backToLoginButton = (
     <div className="relative z-10 mt-6">
-      <Button 
-        variant="ghost" 
+      <Button
+        variant="ghost"
         className="text-muted-foreground hover:text-primary"
         onClick={() => navigate("/auth")}
       >
@@ -291,7 +314,7 @@ export default function AcceptInvitation() {
                 <p className="text-sm text-muted-foreground">
                   The invitation link may have expired or already been used.
                 </p>
-                <Button 
+                <Button
                   onClick={() => navigate("/auth")}
                   className="bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700"
                 >
@@ -335,7 +358,7 @@ export default function AcceptInvitation() {
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span>Redirecting to login page...</span>
               </div>
-              <Button 
+              <Button
                 onClick={() => navigate("/auth")}
                 className="bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700"
               >
@@ -420,7 +443,7 @@ export default function AcceptInvitation() {
                     minLength={6}
                     className="pr-10 bg-white border-gray-200 focus:border-primary h-11"
                   />
-                  <span 
+                  <span
                     className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer select-none"
                     onClick={() => setShowPassword(!showPassword)}
                     onMouseDown={(e) => e.preventDefault()}
@@ -450,7 +473,7 @@ export default function AcceptInvitation() {
                     required
                     className="pr-10 bg-white border-gray-200 focus:border-primary h-11"
                   />
-                  <span 
+                  <span
                     className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer select-none"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     onMouseDown={(e) => e.preventDefault()}
@@ -464,9 +487,9 @@ export default function AcceptInvitation() {
                 </div>
               </div>
 
-              <Button 
-                type="submit" 
-                className="w-full bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 shadow-lg shadow-blue-500/25 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/30" 
+              <Button
+                type="submit"
+                className="w-full bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 shadow-lg shadow-blue-500/25 transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/30"
                 disabled={submitting}
                 size="lg"
               >
