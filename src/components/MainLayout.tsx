@@ -92,157 +92,173 @@ export default function MainLayout({ children }: Props) {
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-gray-950">
       <aside className="w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col h-screen sticky top-0">
-          <div className="p-4 border-b border-gray-200 dark:border-gray-800">
-            <Link to="/dashboard" className="flex items-center gap-2">
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-green-600 rounded-xl blur opacity-25"></div>
-                <img
-                  src="/logo.png"
-                  alt="SafetyHub Logo"
-                  className="h-8 w-8 relative z-10"
-                />
-              </div>
-              <span className="text-lg font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
-                Safety hub
-              </span>
-            </Link>
-          </div>
-
-          <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-            {/* Show loading skeleton while permissions load */}
-            {permissionsLoading ? (
-              <div className="space-y-2 animate-pulse">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="h-9 bg-gray-100 dark:bg-gray-800 rounded-lg" />
-                ))}
-              </div>
-            ) : userRole === "super_admin" ? (
-              /* Super Admin Only Menu - No company options */
-              <div className="space-y-0.5">
-                <p className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Super Admin
-                </p>
-                <Link to="/super-admin/dashboard" className={getLinkClasses("/super-admin/dashboard")}>
-                  <LayoutDashboard className="w-4 h-4" />
-                  <span>Dashboard</span>
-                </Link>
-                <Link to="/super-admin/companies" className={getLinkClasses("/super-admin/companies")}>
-                  <Building2 className="w-4 h-4" />
-                  <span>Companies</span>
-                </Link>
-                <Link to="/super-admin/subscriptions" className={getLinkClasses("/super-admin/subscriptions")}>
-                  <Package className="w-4 h-4" />
-                  <span>Subscriptions</span>
-                </Link>
-                <Link to="/super-admin/addons" className={getLinkClasses("/super-admin/addons")}>
-                  <Puzzle className="w-4 h-4" />
-                  <span>Add-ons</span>
-                </Link>
-                <Link to="/super-admin/analytics" className={getLinkClasses("/super-admin/analytics")}>
-                  <BarChart3 className="w-4 h-4" />
-                  <span>Analytics</span>
-                </Link>
-              </div>
-            ) : (
-              /* Regular Company User Menu */
-              <>
-                {hasPermission("dashboard") && (
-                  <Link to="/dashboard" className={getLinkClasses("/dashboard")}>
-                    <BarChart className="w-4 h-4" />
-                    <span>{t("nav.dashboard")}</span>
-                  </Link>
-                )}
-
-            {hasPermission("employees") && (
-              <Link to="/employees" className={getLinkClasses("/employees")}>
-                <Users className="w-4 h-4" />
-                <span>{t("nav.employees")}</span>
-              </Link>
-            )}
-
-            {hasPermission("investigations") && (
-              <Link
-                to="/investigations"
-                className={getLinkClasses("/investigations")}
-              >
-                <Shield className="w-4 h-4" />
-                <span>{t("nav.investigations")}</span>
-              </Link>
-            )}
-
-            {hasPermission("riskAssessments") && (
-              <Link
-                to="/risk-assessments"
-                className={getLinkClasses("/risk-assessments")}
-              >
-                <AlertTriangle className="w-4 h-4" />
-                <span>{t("nav.riskAssessments")}</span>
-              </Link>
-            )}
-
-            {hasPermission("trainings") && (
-              <Link to="/training" className={getLinkClasses("/training")}>
-                <CheckCircle className="w-4 h-4" />
-                <span>{t("nav.trainings")}</span>
-              </Link>
-            )}
-
-            {hasPermission("incidents") && (
-              <Link to="/incidents" className={getLinkClasses("/incidents")}>
-                <AlertTriangle className="w-4 h-4" />
-                <span>{t("nav.incidents")}</span>
-              </Link>
-            )}
-
-            {hasPermission("audits") && (
-              <Link to="/audits" className={getLinkClasses("/audits")}>
-                <FileCheck className="w-4 h-4" />
-                <span>{t("nav.audits")}</span>
-              </Link>
-            )}
-
-            {hasPermission("reports") && (
-              <Link to="/reports" className={getLinkClasses("/reports")}>
-                <BarChart className="w-4 h-4" />
-                <span>{t("nav.reports")}</span>
-              </Link>
-            )}
-
-            {hasPermission("settings") && (
-              <div className="pt-3 mt-3 border-t border-gray-200 dark:border-gray-800">
-                <Link to="/settings" className={getLinkClasses("/settings")}>
-                  <Settings className="w-4 h-4" />
-                  <span>{t("nav.settings")}</span>
-                </Link>
-              </div>
-            )}
-              </>
-            )}
-          </nav>
-
-          <div className="p-3 border-t border-gray-200 dark:border-gray-800 space-y-2">
-            <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
-              <Building2 className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                  {companyName || "Company"}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
-                  {roleName || userRole?.replace("_", " ") || "User"}
-                </p>
-              </div>
+        <div className="p-4 border-b border-gray-200 dark:border-gray-800">
+          <Link to="/dashboard" className="flex items-center gap-2">
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-green-600 rounded-xl blur opacity-25"></div>
+              <img
+                src="/logo.png"
+                alt="SafetyHub Logo"
+                className="h-8 w-8 relative z-10"
+              />
             </div>
+            <span className="text-lg font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
+              Safety hub
+            </span>
+          </Link>
+        </div>
 
-            <Button
-              variant="ghost"
-              onClick={signOut}
-              className="w-full justify-start text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-700 dark:hover:text-red-300 text-sm h-9"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              <span>{t("nav.logout")}</span>
-            </Button>
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+          {/* Show loading skeleton while permissions load */}
+          {permissionsLoading ? (
+            <div className="space-y-2 animate-pulse">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="h-9 bg-gray-100 dark:bg-gray-800 rounded-lg" />
+              ))}
+            </div>
+          ) : userRole === "super_admin" ? (
+            /* Super Admin Only Menu - Complete Navigation */
+            <div className="space-y-0.5">
+              <p className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Super Admin
+              </p>
+              <Link to="/super-admin/dashboard" className={getLinkClasses("/super-admin/dashboard")}>
+                <LayoutDashboard className="w-4 h-4" />
+                <span>Dashboard</span>
+              </Link>
+              <Link to="/super-admin/companies" className={getLinkClasses("/super-admin/companies")}>
+                <Building2 className="w-4 h-4" />
+                <span>Companies</span>
+              </Link>
+              <Link to="/super-admin/users" className={getLinkClasses("/super-admin/users")}>
+                <Users className="w-4 h-4" />
+                <span>Users</span>
+              </Link>
+              <Link to="/super-admin/subscriptions" className={getLinkClasses("/super-admin/subscriptions")}>
+                <Package className="w-4 h-4" />
+                <span>Subscriptions & Billing</span>
+              </Link>
+              <Link to="/super-admin/addons" className={getLinkClasses("/super-admin/addons")}>
+                <Puzzle className="w-4 h-4" />
+                <span>Add-ons</span>
+              </Link>
+              <Link to="/super-admin/analytics" className={getLinkClasses("/super-admin/analytics")}>
+                <BarChart3 className="w-4 h-4" />
+                <span>Analytics</span>
+              </Link>
+              <Link to="/super-admin/audit-logs" className={getLinkClasses("/super-admin/audit-logs")}>
+                <FileCheck className="w-4 h-4" />
+                <span>System & Logs</span>
+              </Link>
+              <Link to="/super-admin/system-health" className={getLinkClasses("/super-admin/system-health")}>
+                <Shield className="w-4 h-4" />
+                <span>Security</span>
+              </Link>
+              <Link to="/super-admin/support" className={getLinkClasses("/super-admin/support")}>
+                <MessageSquare className="w-4 h-4" />
+                <span>Support</span>
+              </Link>
+            </div>
+          ) : (
+            /* Regular Company User Menu */
+            <>
+              {hasPermission("dashboard") && (
+                <Link to="/dashboard" className={getLinkClasses("/dashboard")}>
+                  <BarChart className="w-4 h-4" />
+                  <span>{t("nav.dashboard")}</span>
+                </Link>
+              )}
+
+              {hasPermission("employees") && (
+                <Link to="/employees" className={getLinkClasses("/employees")}>
+                  <Users className="w-4 h-4" />
+                  <span>{t("nav.employees")}</span>
+                </Link>
+              )}
+
+              {hasPermission("investigations") && (
+                <Link
+                  to="/investigations"
+                  className={getLinkClasses("/investigations")}
+                >
+                  <Shield className="w-4 h-4" />
+                  <span>{t("nav.investigations")}</span>
+                </Link>
+              )}
+
+              {hasPermission("riskAssessments") && (
+                <Link
+                  to="/risk-assessments"
+                  className={getLinkClasses("/risk-assessments")}
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>{t("nav.riskAssessments")}</span>
+                </Link>
+              )}
+
+              {hasPermission("trainings") && (
+                <Link to="/training" className={getLinkClasses("/training")}>
+                  <CheckCircle className="w-4 h-4" />
+                  <span>{t("nav.trainings")}</span>
+                </Link>
+              )}
+
+              {hasPermission("incidents") && (
+                <Link to="/incidents" className={getLinkClasses("/incidents")}>
+                  <AlertTriangle className="w-4 h-4" />
+                  <span>{t("nav.incidents")}</span>
+                </Link>
+              )}
+
+              {hasPermission("audits") && (
+                <Link to="/audits" className={getLinkClasses("/audits")}>
+                  <FileCheck className="w-4 h-4" />
+                  <span>{t("nav.audits")}</span>
+                </Link>
+              )}
+
+              {hasPermission("reports") && (
+                <Link to="/reports" className={getLinkClasses("/reports")}>
+                  <BarChart className="w-4 h-4" />
+                  <span>{t("nav.reports")}</span>
+                </Link>
+              )}
+
+              {hasPermission("settings") && (
+                <div className="pt-3 mt-3 border-t border-gray-200 dark:border-gray-800">
+                  <Link to="/settings" className={getLinkClasses("/settings")}>
+                    <Settings className="w-4 h-4" />
+                    <span>{t("nav.settings")}</span>
+                  </Link>
+                </div>
+              )}
+            </>
+          )}
+        </nav>
+
+        <div className="p-3 border-t border-gray-200 dark:border-gray-800 space-y-2">
+          <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
+            <Building2 className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                {companyName || "Company"}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
+                {roleName || userRole?.replace("_", " ") || "User"}
+              </p>
+            </div>
           </div>
-        </aside>
+
+          <Button
+            variant="ghost"
+            onClick={signOut}
+            className="w-full justify-start text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-700 dark:hover:text-red-300 text-sm h-9"
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            <span>{t("nav.logout")}</span>
+          </Button>
+        </div>
+      </aside>
 
       <div className="flex-1 flex flex-col">
         <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-10">
