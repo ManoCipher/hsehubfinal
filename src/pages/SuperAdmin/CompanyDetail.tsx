@@ -38,6 +38,7 @@ import {
     Clock,
     FileEdit,
     Key,
+    Plus,
 } from "lucide-react";
 import {
     Dialog,
@@ -89,10 +90,12 @@ interface SubscriptionEvent {
 
 interface CompanyAddon {
     id: string;
+    addon_id: string;
     addon_name: string;
-    price_paid: number;
+    price_paid: number | null;
     status: string;
-    activated_at: string;
+    start_date: string;
+    billing_cycle: string;
 }
 
 export default function CompanyDetail() {
@@ -228,16 +231,31 @@ export default function CompanyDetail() {
     const fetchAddons = async () => {
         const { data, error } = await supabase
             .from("company_addons")
-            .select("*")
+            .select(`
+                *,
+                addon_definitions:addon_id(name, code)
+            `)
             .eq("company_id", id)
-            .order("activated_at", { ascending: false });
+            .order("start_date", { ascending: false });
 
         if (error) {
             console.error("Addons error:", error);
             setAddons([]);
             return;
         }
-        setAddons(data || []);
+
+        // Transform data to include addon_name from the join
+        const transformedAddons = (data || []).map(addon => ({
+            id: addon.id,
+            addon_id: addon.addon_id,
+            addon_name: addon.addon_definitions?.name || "Unknown Add-on",
+            price_paid: addon.price_paid,
+            status: addon.status,
+            start_date: addon.start_date,
+            billing_cycle: addon.billing_cycle,
+        }));
+
+        setAddons(transformedAddons);
     };
 
     const fetchAuditLogs = async () => {
@@ -576,14 +594,6 @@ export default function CompanyDetail() {
                             Extend Trial
                         </Button>
 
-                        <Button
-                            onClick={() => setInvoiceCorrectionDialogOpen(true)}
-                            variant="outline"
-                        >
-                            <FileEdit className="w-4 h-4 mr-2" />
-                            Invoice Correction
-                        </Button>
-
                         {company.is_blocked ? (
                             <Button onClick={handleUnblockCompany} variant="default">
                                 <CheckCircle className="w-4 h-4 mr-2" />
@@ -614,6 +624,69 @@ export default function CompanyDetail() {
 
                 {/* Overview Tab */}
                 <TabsContent value="overview" className="space-y-4">
+                    {/* Subscription Status Card - Most Important */}
+                    <Card className={`border-2 ${company.subscription_status === "trial"
+                        ? "border-orange-300 bg-orange-50 dark:border-orange-600 dark:bg-orange-950/30"
+                        : company.subscription_status === "active"
+                            ? "border-green-300 bg-green-50 dark:border-green-600 dark:bg-green-950/30"
+                            : "border-red-300 bg-red-50 dark:border-red-600 dark:bg-red-950/30"
+                        }`}>
+                        <CardHeader>
+                            <div className="flex items-center justify-between">
+                                <CardTitle className="flex items-center gap-2">
+                                    <CreditCard className="h-5 w-5" />
+                                    Subscription Details
+                                </CardTitle>
+                                <Badge
+                                    variant={company.subscription_status === "active" ? "default" : company.subscription_status === "trial" ? "secondary" : "destructive"}
+                                    className="text-sm px-3 py-1"
+                                >
+                                    {company.subscription_status.toUpperCase()}
+                                </Badge>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div>
+                                    <Label className="text-muted-foreground text-sm">Plan Tier</Label>
+                                    <p className="text-xl font-bold capitalize">{company.subscription_tier}</p>
+                                </div>
+                                <div>
+                                    <Label className="text-muted-foreground text-sm">
+                                        {company.subscription_status === "trial" ? "Trial Ends" : "Subscription Status"}
+                                    </Label>
+                                    {company.subscription_status === "trial" ? (
+                                        <>
+                                            <p className="text-xl font-bold text-orange-600 dark:text-orange-400">
+                                                {company.trial_ends_at
+                                                    ? new Date(company.trial_ends_at).toLocaleDateString()
+                                                    : "Not set"}
+                                            </p>
+                                            {company.trial_ends_at && (
+                                                <p className="text-sm text-orange-600 dark:text-orange-400">
+                                                    {Math.max(0, Math.ceil((new Date(company.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} days remaining
+                                                </p>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <p className="text-xl font-bold capitalize text-green-600 dark:text-green-400">
+                                            {company.subscription_status}
+                                        </p>
+                                    )}
+                                </div>
+                                <div>
+                                    <Label className="text-muted-foreground text-sm">Max Users</Label>
+                                    <p className="text-xl font-bold">
+                                        {users.length} / {company.max_employees}
+                                    </p>
+                                    <p className="text-sm text-muted-foreground">
+                                        {company.max_employees - users.length} slots available
+                                    </p>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -819,20 +892,97 @@ export default function CompanyDetail() {
                             )}
                         </CardContent>
                     </Card>
+
+                    {/* Invoice Corrections Section */}
+                    <Card>
+                        <CardHeader>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <FileEdit className="h-5 w-5" />
+                                        Invoice Corrections
+                                    </CardTitle>
+                                    <CardDescription>Manage invoice adjustments and corrections</CardDescription>
+                                </div>
+                                <Button
+                                    onClick={() => setInvoiceCorrectionDialogOpen(true)}
+                                    variant="outline"
+                                >
+                                    <FileEdit className="w-4 h-4 mr-2" />
+                                    New Correction
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            {auditLogs.filter(log => log.action_type === "invoice_correction").length === 0 ? (
+                                <p className="text-center py-8 text-muted-foreground">
+                                    No invoice corrections recorded yet
+                                </p>
+                            ) : (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Date</TableHead>
+                                            <TableHead>Reason</TableHead>
+                                            <TableHead>Amount</TableHead>
+                                            <TableHead>Corrected By</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {auditLogs
+                                            .filter(log => log.action_type === "invoice_correction")
+                                            .map((log) => (
+                                                <TableRow key={log.id}>
+                                                    <TableCell>
+                                                        {new Date(log.created_at).toLocaleDateString()}
+                                                    </TableCell>
+                                                    <TableCell>{log.details?.reason || "-"}</TableCell>
+                                                    <TableCell>€{log.details?.amount || "0"}</TableCell>
+                                                    <TableCell>{log.details?.corrected_by || log.actor_email}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                    </TableBody>
+                                </Table>
+                            )}
+                        </CardContent>
+                    </Card>
                 </TabsContent>
 
                 {/* Modules Tab */}
                 <TabsContent value="modules">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Active Add-ons</CardTitle>
-                            <CardDescription>Purchased add-ons for this company</CardDescription>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <Puzzle className="h-5 w-5" />
+                                        Active Modules & Add-ons
+                                    </CardTitle>
+                                    <CardDescription>Modules and add-ons enabled for this company</CardDescription>
+                                </div>
+                                <Link to="/super-admin/addons">
+                                    <Button variant="outline">
+                                        <Plus className="w-4 h-4 mr-2" />
+                                        Add Module
+                                    </Button>
+                                </Link>
+                            </div>
                         </CardHeader>
                         <CardContent>
                             {addons.length === 0 ? (
-                                <p className="text-center py-8 text-muted-foreground">
-                                    No add-ons purchased
-                                </p>
+                                <div className="text-center py-12 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
+                                    <Puzzle className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                                    <h3 className="text-lg font-medium mb-2">No Modules Added</h3>
+                                    <p className="text-muted-foreground mb-4">
+                                        This company has no add-ons or modules enabled yet.
+                                    </p>
+                                    <Link to="/super-admin/addons">
+                                        <Button>
+                                            <Plus className="w-4 h-4 mr-2" />
+                                            Add Module to Company
+                                        </Button>
+                                    </Link>
+                                </div>
                             ) : (
                                 <Table>
                                     <TableHeader>
@@ -847,7 +997,7 @@ export default function CompanyDetail() {
                                         {addons.map((addon) => (
                                             <TableRow key={addon.id}>
                                                 <TableCell className="font-medium">{addon.addon_name}</TableCell>
-                                                <TableCell>€{addon.price_paid}</TableCell>
+                                                <TableCell>€{addon.price_paid || 0}</TableCell>
                                                 <TableCell>
                                                     <Badge
                                                         variant={addon.status === "active" ? "default" : "secondary"}
@@ -856,7 +1006,7 @@ export default function CompanyDetail() {
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    {new Date(addon.activated_at).toLocaleDateString()}
+                                                    {new Date(addon.start_date).toLocaleDateString()}
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -871,14 +1021,23 @@ export default function CompanyDetail() {
                 <TabsContent value="activity">
                     <Card>
                         <CardHeader>
-                            <CardTitle>Activity Logs</CardTitle>
-                            <CardDescription>Recent actions in this company</CardDescription>
+                            <CardTitle className="flex items-center gap-2">
+                                <Activity className="h-5 w-5" />
+                                Company Activity Logs
+                            </CardTitle>
+                            <CardDescription>
+                                All actions and events recorded for this company's users and system
+                            </CardDescription>
                         </CardHeader>
                         <CardContent>
                             {auditLogs.length === 0 ? (
-                                <p className="text-center py-8 text-muted-foreground">
-                                    No activity logs yet
-                                </p>
+                                <div className="text-center py-12 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg">
+                                    <Activity className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                                    <h3 className="text-lg font-medium mb-2">No Activity Yet</h3>
+                                    <p className="text-muted-foreground">
+                                        Activity logs will appear here when users perform actions in the system.
+                                    </p>
+                                </div>
                             ) : (
                                 <Table>
                                     <TableHeader>
@@ -886,6 +1045,7 @@ export default function CompanyDetail() {
                                             <TableHead>Action</TableHead>
                                             <TableHead>Actor</TableHead>
                                             <TableHead>Target</TableHead>
+                                            <TableHead>Details</TableHead>
                                             <TableHead>Date</TableHead>
                                         </TableRow>
                                     </TableHeader>
@@ -893,11 +1053,26 @@ export default function CompanyDetail() {
                                         {auditLogs.map((log) => (
                                             <TableRow key={log.id}>
                                                 <TableCell>
-                                                    <Badge>{log.action_type}</Badge>
+                                                    <Badge
+                                                        variant={
+                                                            log.action_type?.includes("delete") ? "destructive" :
+                                                                log.action_type?.includes("create") ? "default" :
+                                                                    "secondary"
+                                                        }
+                                                    >
+                                                        {log.action_type?.replace(/_/g, " ")}
+                                                    </Badge>
                                                 </TableCell>
-                                                <TableCell>{log.actor_email}</TableCell>
-                                                <TableCell>{log.target_name || log.target_type}</TableCell>
-                                                <TableCell>
+                                                <TableCell>{log.actor_email || "System"}</TableCell>
+                                                <TableCell>{log.target_name || log.target_type || "-"}</TableCell>
+                                                <TableCell className="max-w-xs truncate">
+                                                    {log.details ? (
+                                                        typeof log.details === "object"
+                                                            ? Object.entries(log.details).slice(0, 2).map(([k, v]) => `${k}: ${v}`).join(", ")
+                                                            : String(log.details)
+                                                    ) : "-"}
+                                                </TableCell>
+                                                <TableCell className="whitespace-nowrap">
                                                     {new Date(log.created_at).toLocaleString()}
                                                 </TableCell>
                                             </TableRow>

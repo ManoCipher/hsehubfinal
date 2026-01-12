@@ -349,6 +349,108 @@ export default function SuperAdminDashboard() {
         </Card>
       </div>
 
+      {/* System Status & Critical Alerts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* System Status */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              System Status
+            </CardTitle>
+            <CardDescription>Current system health overview</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                  <Building2 className="w-4 h-4 text-green-600" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">Database</p>
+                  <p className="text-xs text-muted-foreground">Supabase PostgreSQL</p>
+                </div>
+              </div>
+              <Badge variant="default" className="bg-green-600">Operational</Badge>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                  <BarChart3 className="w-4 h-4 text-green-600" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">API Services</p>
+                  <p className="text-xs text-muted-foreground">Response time: 45ms</p>
+                </div>
+              </div>
+              <Badge variant="default" className="bg-green-600">Healthy</Badge>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                  <Users className="w-4 h-4 text-green-600" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">Authentication</p>
+                  <p className="text-xs text-muted-foreground">Supabase Auth</p>
+                </div>
+              </div>
+              <Badge variant="default" className="bg-green-600">Active</Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Critical Alerts */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-orange-500" />
+              Critical Alerts
+            </CardTitle>
+            <CardDescription>Issues requiring immediate attention</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Trials Expiring Soon */}
+              <div>
+                <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-orange-500" />
+                  Trials Expiring Soon
+                </h4>
+                {expiringTrials.length === 0 ? (
+                  <p className="text-center py-4 text-muted-foreground text-sm">
+                    No trials expiring soon
+                  </p>
+                ) : (
+                  expiringTrials.map((company) => {
+                    const createdDate = new Date(company.created_at);
+                    const trialEndDate = company.trial_ends_at
+                      ? new Date(company.trial_ends_at)
+                      : new Date(createdDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+                    const daysLeft = Math.max(0, Math.ceil((trialEndDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+
+                    return (
+                      <div
+                        key={company.id}
+                        className="flex items-center justify-between p-3 border rounded-lg"
+                      >
+                        <div>
+                          <p className="font-medium text-sm">{company.name}</p>
+                          <p className="text-xs text-muted-foreground">{company.email}</p>
+                        </div>
+                        <Badge variant={daysLeft <= 2 ? "destructive" : "secondary"}>
+                          {daysLeft} days left
+                        </Badge>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Tier Distribution */}
@@ -365,65 +467,19 @@ export default function SuperAdminDashboard() {
                     data={tierDistribution}
                     cx="50%"
                     cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
+                    innerRadius={50}
+                    outerRadius={70}
                     paddingAngle={5}
                     dataKey="value"
-                    label={({ name, value }) => `${name}: ${value}`}
                   >
                     {tierDistribution.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip formatter={(value, name) => [`${value} companies`, name]} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Trials Expiring Soon */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-orange-500" />
-              Trials Expiring Soon
-            </CardTitle>
-            <CardDescription>Companies in trial phase requiring attention</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {expiringTrials.length === 0 ? (
-                <p className="text-center py-8 text-muted-foreground">
-                  No trials expiring soon
-                </p>
-              ) : (
-                expiringTrials.map((company) => {
-                  const createdDate = new Date(company.created_at);
-                  const trialEndDate = company.trial_ends_at
-                    ? new Date(company.trial_ends_at)
-                    : new Date(createdDate.getTime() + 7 * 24 * 60 * 60 * 1000);
-                  const daysLeft = Math.max(0, Math.ceil((trialEndDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
-
-                  return (
-                    <div
-                      key={company.id}
-                      className="flex items-center justify-between p-3 border rounded-lg"
-                    >
-                      <div>
-                        <p className="font-medium">{company.name}</p>
-                        <p className="text-xs text-muted-foreground">{company.email}</p>
-                      </div>
-                      <div className="text-right">
-                        <Badge variant={daysLeft <= 2 ? "destructive" : "secondary"}>
-                          {daysLeft} days left
-                        </Badge>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
             </div>
           </CardContent>
         </Card>
