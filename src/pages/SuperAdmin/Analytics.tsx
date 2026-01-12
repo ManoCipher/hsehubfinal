@@ -66,6 +66,9 @@ interface CompanyUsage {
   employee_count: number;
   document_count: number;
   course_count: number;
+  audit_count: number;
+  incident_count: number;
+  risk_assessment_count: number;
   storage_used_bytes: number;
   storage_limit_bytes: number;
   last_activity_at: string;
@@ -155,9 +158,16 @@ export default function Analytics() {
 
       if (error) throw error;
 
-      // For each company, get usage counts
       const usagePromises = (companies || []).map(async (company) => {
-        const [employees, documents, courses, documentStorage] = await Promise.all([
+        const [
+          employees,
+          documents,
+          courses,
+          audits,
+          incidents,
+          riskAssessments,
+          documentStorage,
+        ] = await Promise.all([
           supabase
             .from("team_members")
             .select("id", { count: "exact", head: true })
@@ -168,6 +178,18 @@ export default function Analytics() {
             .eq("company_id", company.id),
           supabase
             .from("courses")
+            .select("id", { count: "exact", head: true })
+            .eq("company_id", company.id),
+          supabase
+            .from("audits")
+            .select("id", { count: "exact", head: true })
+            .eq("company_id", company.id),
+          supabase
+            .from("incidents")
+            .select("id", { count: "exact", head: true })
+            .eq("company_id", company.id),
+          supabase
+            .from("risk_assessments")
             .select("id", { count: "exact", head: true })
             .eq("company_id", company.id),
           supabase
@@ -187,6 +209,9 @@ export default function Analytics() {
           employee_count: employees.count || 0,
           document_count: documents.count || 0,
           course_count: courses.count || 0,
+          audit_count: audits.count || 0,
+          incident_count: incidents.count || 0,
+          risk_assessment_count: riskAssessments.count || 0,
           storage_used_bytes: totalStorage,
           storage_limit_bytes: 5368709120, // 5GB default limit
         };
@@ -542,6 +567,9 @@ export default function Analytics() {
                 <TableHead>Employees</TableHead>
                 <TableHead>Documents</TableHead>
                 <TableHead>Courses</TableHead>
+                <TableHead>Audits</TableHead>
+                <TableHead>Incidents</TableHead>
+                <TableHead>Risks</TableHead>
                 <TableHead>Storage</TableHead>
                 <TableHead>Last Active</TableHead>
               </TableRow>
@@ -583,6 +611,9 @@ export default function Analytics() {
                   </TableCell>
                   <TableCell>{company.document_count}</TableCell>
                   <TableCell>{company.course_count}</TableCell>
+                  <TableCell>{company.audit_count}</TableCell>
+                  <TableCell>{company.incident_count}</TableCell>
+                  <TableCell>{company.risk_assessment_count}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span className="text-sm">
