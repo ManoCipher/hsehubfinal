@@ -31,7 +31,7 @@ export default function SystemLogs() {
             <div className="mb-6">
                 <h2 className="text-3xl font-bold mb-2">System & Logs</h2>
                 <p className="text-muted-foreground">
-                    Monitor system health and review platform activity
+                    Monitor system health and platform activity
                 </p>
             </div>
 

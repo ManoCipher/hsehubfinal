@@ -150,6 +150,10 @@ export default function MainLayout({ children }: Props) {
                 <FileCheck className="w-4 h-4" />
                 <span>System & Logs</span>
               </Link>
+              <Link to="/super-admin/security" className={getLinkClasses("/super-admin/security")}>
+                <Shield className="w-4 h-4" />
+                <span>Security</span>
+              </Link>
               <Link to="/super-admin/support" className={getLinkClasses("/super-admin/support")}>
                 <MessageSquare className="w-4 h-4" />
                 <span>Support</span>
