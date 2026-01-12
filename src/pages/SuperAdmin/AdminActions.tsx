@@ -344,9 +344,13 @@ export default function AdminActions() {
         }
     };
 
-    const filteredCompanies = companies.filter(c =>
-        c.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const [showBlockedOnly, setShowBlockedOnly] = useState(false);
+
+    const filteredCompanies = companies.filter(c => {
+        const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesBlocked = showBlockedOnly ? c.is_blocked : true;
+        return matchesSearch && matchesBlocked;
+    });
 
     if (loading) {
         return (
@@ -380,39 +384,55 @@ export default function AdminActions() {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder="Search company..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-10"
-                            />
+                        <div className="space-y-2">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    placeholder="Search company..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="pl-10"
+                                />
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <input
+                                    type="checkbox"
+                                    id="showBlocked"
+                                    className="h-4 w-4 rounded border-gray-300"
+                                    checked={showBlockedOnly}
+                                    onChange={(e) => setShowBlockedOnly(e.target.checked)}
+                                />
+                                <Label htmlFor="showBlocked" className="text-sm">Show Blocked Only</Label>
+                            </div>
                         </div>
                         <div className="max-h-48 overflow-y-auto space-y-2">
-                            {filteredCompanies.slice(0, 5).map((company) => (
-                                <div key={company.id} className="flex items-center justify-between p-2 border rounded-lg">
-                                    <div className="flex items-center gap-2">
-                                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                                        <span className="text-sm font-medium">{company.name}</span>
-                                        <Badge variant={company.is_blocked ? "destructive" : "outline"}>
-                                            {company.is_blocked ? "Blocked" : "Active"}
-                                        </Badge>
+                            {filteredCompanies.length > 0 ? (
+                                filteredCompanies.slice(0, 5).map((company) => (
+                                    <div key={company.id} className="flex items-center justify-between p-2 border rounded-lg">
+                                        <div className="flex items-center gap-2">
+                                            <Building2 className="h-4 w-4 text-muted-foreground" />
+                                            <span className="text-sm font-medium">{company.name}</span>
+                                            <Badge variant={company.is_blocked ? "destructive" : "outline"}>
+                                                {company.is_blocked ? "Blocked" : "Active"}
+                                            </Badge>
+                                        </div>
+                                        <Button
+                                            size="sm"
+                                            variant={company.is_blocked ? "default" : "destructive"}
+                                            onClick={() => handleToggleCompanyLock(company.id, company.is_blocked)}
+                                            disabled={loadingAction}
+                                        >
+                                            {company.is_blocked ? (
+                                                <><Unlock className="h-3 w-3 mr-1" /> Unlock</>
+                                            ) : (
+                                                <><Lock className="h-3 w-3 mr-1" /> Lock</>
+                                            )}
+                                        </Button>
                                     </div>
-                                    <Button
-                                        size="sm"
-                                        variant={company.is_blocked ? "default" : "destructive"}
-                                        onClick={() => handleToggleCompanyLock(company.id, company.is_blocked)}
-                                        disabled={loadingAction}
-                                    >
-                                        {company.is_blocked ? (
-                                            <><Unlock className="h-3 w-3 mr-1" /> Unlock</>
-                                        ) : (
-                                            <><Lock className="h-3 w-3 mr-1" /> Lock</>
-                                        )}
-                                    </Button>
-                                </div>
-                            ))}
+                                ))
+                            ) : (
+                                <p className="text-sm text-center text-muted-foreground py-4">No companies found</p>
+                            )}
                         </div>
                     </CardContent>
                 </Card>
