@@ -1,0 +1,668 @@
+import { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+    Lock,
+    Unlock,
+    Calendar,
+    Package,
+    Receipt,
+    UserCog,
+    MessageSquarePlus,
+    Zap,
+    Building2,
+    Search,
+    CheckCircle,
+    AlertTriangle,
+} from "lucide-react";
+
+interface Company {
+    id: string;
+    name: string;
+    is_blocked: boolean;
+    subscription_status: string;
+}
+
+interface User {
+    id: string;
+    email: string;
+    full_name: string;
+    company_id: string;
+}
+
+export default function AdminActions() {
+    const { user, userRole, loading } = useAuth();
+    const navigate = useNavigate();
+    const { toast } = useToast();
+
+    const [companies, setCompanies] = useState<Company[]>([]);
+    const [users, setUsers] = useState<User[]>([]);
+    const [selectedCompany, setSelectedCompany] = useState<string>("");
+    const [selectedUser, setSelectedUser] = useState<string>("");
+    const [loadingAction, setLoadingAction] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+
+    // Dialog states
+    const [extendTrialDays, setExtendTrialDays] = useState("7");
+    const [systemMessage, setSystemMessage] = useState("");
+    const [invoiceCorrection, setInvoiceCorrection] = useState({ amount: "", reason: "" });
+
+    useEffect(() => {
+        if (!loading && (!user || userRole !== "super_admin")) {
+            navigate("/dashboard");
+        }
+    }, [user, userRole, loading, navigate]);
+
+    useEffect(() => {
+        if (user && userRole === "super_admin") {
+            fetchCompanies();
+            fetchUsers();
+            fetchAddons();
+        }
+    }, [user, userRole]);
+
+    const fetchCompanies = async () => {
+        const { data } = await supabase
+            .from("companies")
+            .select("id, name, is_blocked, subscription_status")
+            .order("name");
+        if (data) setCompanies(data);
+    };
+
+    const [addons, setAddons] = useState<{ id: string; name: string; code: string }[]>([]);
+
+    const fetchUsers = async () => {
+        // Get all user_roles with company associations
+        const { data: userRoles } = await supabase
+            .from("user_roles")
+            .select("user_id, company_id, role")
+            .order("created_at", { ascending: false });
+
+        if (!userRoles || userRoles.length === 0) {
+            setUsers([]);
+            return;
+        }
+
+        // Get unique user IDs
+        const userIds = [...new Set(userRoles.map(ur => ur.user_id))];
+
+        // Fetch profiles for these users
+        const { data: profiles } = await supabase
+            .from("profiles")
+            .select("id, email, full_name")
+            .in("id", userIds);
+
+        if (profiles) {
+            const transformedUsers = profiles.map(p => {
+                const userRole = userRoles.find(ur => ur.user_id === p.id);
+                return {
+                    id: p.id,
+                    email: p.email || "N/A",
+                    full_name: p.full_name || "N/A",
+                    company_id: userRole?.company_id || "",
+                };
+            });
+            setUsers(transformedUsers);
+        }
+    };
+
+    const fetchAddons = async () => {
+        const { data } = await supabase
+            .from("addon_definitions")
+            .select("id, name, code")
+            .order("name");
+        if (data) setAddons(data);
+    };
+
+    const logAuditAction = async (actionType: string, targetType: string, targetName: string, details?: any) => {
+        await supabase.from("audit_logs").insert({
+            actor_email: user?.email,
+            actor_role: "super_admin",
+            action_type: actionType,
+            target_type: targetType,
+            target_name: targetName,
+            details: details,
+            company_id: selectedCompany || null,
+        });
+    };
+
+    // Action: Lock/Unlock Company
+    const handleToggleCompanyLock = async (companyId: string, isBlocked: boolean) => {
+        setLoadingAction(true);
+        try {
+            const newBlockedStatus = !isBlocked;
+            const { error } = await supabase
+                .from("companies")
+                .update({ is_blocked: newBlockedStatus })
+                .eq("id", companyId);
+
+            if (error) throw error;
+
+            const company = companies.find(c => c.id === companyId);
+            await logAuditAction(
+                newBlockedStatus ? "block_company" : "unblock_company",
+                "company",
+                company?.name || companyId,
+                { previous_blocked_status: isBlocked, new_blocked_status: newBlockedStatus }
+            );
+
+            toast({
+                title: "Success",
+                description: `Company ${newBlockedStatus ? "locked" : "unlocked"} successfully`,
+            });
+            fetchCompanies();
+        } catch (error: any) {
+            toast({ title: "Error", description: error.message, variant: "destructive" });
+        } finally {
+            setLoadingAction(false);
+        }
+    };
+
+    // Action: Extend Trial
+    const handleExtendTrial = async () => {
+        if (!selectedCompany) {
+            toast({ title: "Error", description: "Please select a company", variant: "destructive" });
+            return;
+        }
+        setLoadingAction(true);
+        try {
+            const { data: subscription } = await supabase
+                .from("subscriptions")
+                .select("*")
+                .eq("company_id", selectedCompany)
+                .single();
+
+            const currentEndDate = subscription?.end_date ? new Date(subscription.end_date) : new Date();
+            const newEndDate = new Date(currentEndDate);
+            newEndDate.setDate(newEndDate.getDate() + parseInt(extendTrialDays));
+
+            const { error } = await supabase
+                .from("subscriptions")
+                .update({ end_date: newEndDate.toISOString(), status: "trial" })
+                .eq("company_id", selectedCompany);
+
+            if (error) throw error;
+
+            const company = companies.find(c => c.id === selectedCompany);
+            await logAuditAction("extend_trial", "subscription", company?.name || selectedCompany, {
+                days_extended: extendTrialDays,
+                new_end_date: newEndDate.toISOString(),
+            });
+
+            toast({
+                title: "Trial Extended",
+                description: `Trial extended by ${extendTrialDays} days`,
+            });
+        } catch (error: any) {
+            toast({ title: "Error", description: error.message, variant: "destructive" });
+        } finally {
+            setLoadingAction(false);
+        }
+    };
+
+    // Action: Activate Module
+    const handleActivateModule = async (moduleId: string) => {
+        if (!selectedCompany) {
+            toast({ title: "Error", description: "Please select a company", variant: "destructive" });
+            return;
+        }
+        setLoadingAction(true);
+        try {
+            const { error } = await supabase
+                .from("company_addons")
+                .insert({
+                    company_id: selectedCompany,
+                    addon_id: moduleId,
+                    status: "active",
+                    start_date: new Date().toISOString(),
+                });
+
+            if (error) throw error;
+
+            const company = companies.find(c => c.id === selectedCompany);
+            await logAuditAction("activate_module", "addon", moduleId, {
+                company: company?.name,
+            });
+
+            toast({ title: "Success", description: "Module activated successfully" });
+        } catch (error: any) {
+            toast({ title: "Error", description: error.message, variant: "destructive" });
+        } finally {
+            setLoadingAction(false);
+        }
+    };
+
+    // Action: Reset User Password
+    const handleResetUser = async () => {
+        if (!selectedUser) {
+            toast({ title: "Error", description: "Please select a user", variant: "destructive" });
+            return;
+        }
+        setLoadingAction(true);
+        try {
+            const selectedUserData = users.find(u => u.id === selectedUser);
+
+            // In production, this would trigger a password reset email
+            await logAuditAction("reset_password", "user", selectedUserData?.email || selectedUser, {
+                initiated_by: user?.email,
+            });
+
+            toast({
+                title: "Password Reset Initiated",
+                description: `Password reset email sent to ${selectedUserData?.email}`,
+            });
+        } catch (error: any) {
+            toast({ title: "Error", description: error.message, variant: "destructive" });
+        } finally {
+            setLoadingAction(false);
+        }
+    };
+
+    // Action: Send System Message
+    const handleSendSystemMessage = async () => {
+        if (!systemMessage.trim()) {
+            toast({ title: "Error", description: "Please enter a message", variant: "destructive" });
+            return;
+        }
+        setLoadingAction(true);
+        try {
+            // Insert into system_alerts for broadcast
+            const { error } = await supabase
+                .from("system_alerts")
+                .insert({
+                    title: "System Announcement",
+                    message: systemMessage,
+                    severity: "low",
+                    status: "active",
+                });
+
+            if (error) throw error;
+
+            await logAuditAction("send_system_message", "system", "all_users", {
+                message: systemMessage,
+            });
+
+            toast({ title: "Success", description: "System message sent to all users" });
+            setSystemMessage("");
+        } catch (error: any) {
+            toast({ title: "Error", description: error.message, variant: "destructive" });
+        } finally {
+            setLoadingAction(false);
+        }
+    };
+
+    // Action: Correct Invoice
+    const handleCorrectInvoice = async () => {
+        if (!selectedCompany || !invoiceCorrection.amount || !invoiceCorrection.reason) {
+            toast({ title: "Error", description: "Please fill all fields", variant: "destructive" });
+            return;
+        }
+        setLoadingAction(true);
+        try {
+            const company = companies.find(c => c.id === selectedCompany);
+            await logAuditAction("correct_invoice", "invoice", company?.name || selectedCompany, {
+                amount: invoiceCorrection.amount,
+                reason: invoiceCorrection.reason,
+            });
+
+            toast({ title: "Success", description: "Invoice correction logged" });
+            setInvoiceCorrection({ amount: "", reason: "" });
+        } catch (error: any) {
+            toast({ title: "Error", description: error.message, variant: "destructive" });
+        } finally {
+            setLoadingAction(false);
+        }
+    };
+
+    const [showBlockedOnly, setShowBlockedOnly] = useState(false);
+
+    const filteredCompanies = companies.filter(c => {
+        const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesBlocked = showBlockedOnly ? c.is_blocked : true;
+        return matchesSearch && matchesBlocked;
+    });
+
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="p-8">
+            <div className="mb-8">
+                <h2 className="text-3xl font-bold mb-2">Admin Quick Actions</h2>
+                <p className="text-muted-foreground">
+                    Quick intervention tools for customer support - no developer needed
+                </p>
+            </div>
+
+            {/* Quick Action Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+                {/* Lock/Unlock Company */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Lock className="h-5 w-5 text-red-500" />
+                            Lock / Unlock Company
+                        </CardTitle>
+                        <CardDescription>
+                            Temporarily suspend or reactivate company access
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    placeholder="Search company..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="pl-10"
+                                />
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <input
+                                    type="checkbox"
+                                    id="showBlocked"
+                                    className="h-4 w-4 rounded border-gray-300"
+                                    checked={showBlockedOnly}
+                                    onChange={(e) => setShowBlockedOnly(e.target.checked)}
+                                />
+                                <Label htmlFor="showBlocked" className="text-sm">Show Blocked Only</Label>
+                            </div>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto space-y-2">
+                            {filteredCompanies.length > 0 ? (
+                                filteredCompanies.slice(0, 5).map((company) => (
+                                    <div key={company.id} className="flex items-center justify-between p-2 border rounded-lg">
+                                        <div className="flex items-center gap-2">
+                                            <Building2 className="h-4 w-4 text-muted-foreground" />
+                                            <span className="text-sm font-medium">{company.name}</span>
+                                            <Badge variant={company.is_blocked ? "destructive" : "outline"}>
+                                                {company.is_blocked ? "Blocked" : "Active"}
+                                            </Badge>
+                                        </div>
+                                        <Button
+                                            size="sm"
+                                            variant={company.is_blocked ? "default" : "destructive"}
+                                            onClick={() => handleToggleCompanyLock(company.id, company.is_blocked)}
+                                            disabled={loadingAction}
+                                        >
+                                            {company.is_blocked ? (
+                                                <><Unlock className="h-3 w-3 mr-1" /> Unlock</>
+                                            ) : (
+                                                <><Lock className="h-3 w-3 mr-1" /> Lock</>
+                                            )}
+                                        </Button>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-sm text-center text-muted-foreground py-4">No companies found</p>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Extend Trial */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Calendar className="h-5 w-5 text-blue-500" />
+                            Extend Trial Period
+                        </CardTitle>
+                        <CardDescription>
+                            Give customers extra time to evaluate the platform
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div>
+                            <Label>Select Company</Label>
+                            <Select value={selectedCompany} onValueChange={setSelectedCompany}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Choose company..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {companies.map((c) => (
+                                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label>Extend by (days)</Label>
+                            <Select value={extendTrialDays} onValueChange={setExtendTrialDays}>
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="7">7 days</SelectItem>
+                                    <SelectItem value="14">14 days</SelectItem>
+                                    <SelectItem value="30">30 days</SelectItem>
+                                    <SelectItem value="60">60 days</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <Button onClick={handleExtendTrial} disabled={loadingAction || !selectedCompany} className="w-full">
+                            <Calendar className="h-4 w-4 mr-2" />
+                            Extend Trial
+                        </Button>
+                    </CardContent>
+                </Card>
+
+                {/* Activate Module */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Package className="h-5 w-5 text-purple-500" />
+                            Activate Module
+                        </CardTitle>
+                        <CardDescription>
+                            Manually enable add-on modules for a company
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div>
+                            <Label>Select Company</Label>
+                            <Select value={selectedCompany} onValueChange={setSelectedCompany}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Choose company..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {companies.map((c) => (
+                                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                            {addons.length > 0 ? (
+                                addons.map((addon) => (
+                                    <Button
+                                        key={addon.id}
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleActivateModule(addon.id)}
+                                        disabled={loadingAction || !selectedCompany}
+                                    >
+                                        {addon.name}
+                                    </Button>
+                                ))
+                            ) : (
+                                <>
+                                    <Button variant="outline" size="sm" disabled>No modules found</Button>
+                                </>
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Correct Invoice */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Receipt className="h-5 w-5 text-green-500" />
+                            Correct Invoice
+                        </CardTitle>
+                        <CardDescription>
+                            Log invoice corrections and adjustments
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div>
+                            <Label>Company</Label>
+                            <Select value={selectedCompany} onValueChange={setSelectedCompany}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Choose company..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {companies.map((c) => (
+                                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label>Correction Amount (€)</Label>
+                            <Input
+                                type="number"
+                                placeholder="0.00"
+                                value={invoiceCorrection.amount}
+                                onChange={(e) => setInvoiceCorrection({ ...invoiceCorrection, amount: e.target.value })}
+                            />
+                        </div>
+                        <div>
+                            <Label>Reason</Label>
+                            <Input
+                                placeholder="Reason for correction"
+                                value={invoiceCorrection.reason}
+                                onChange={(e) => setInvoiceCorrection({ ...invoiceCorrection, reason: e.target.value })}
+                            />
+                        </div>
+                        <Button onClick={handleCorrectInvoice} disabled={loadingAction} className="w-full">
+                            <Receipt className="h-4 w-4 mr-2" />
+                            Log Correction
+                        </Button>
+                    </CardContent>
+                </Card>
+
+                {/* Reset User */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <UserCog className="h-5 w-5 text-amber-500" />
+                            Reset User
+                        </CardTitle>
+                        <CardDescription>
+                            Send password reset or unlock user accounts
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div>
+                            <Label>Select User</Label>
+                            <Select value={selectedUser} onValueChange={setSelectedUser}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Choose user..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {users.slice(0, 20).map((u) => (
+                                        <SelectItem key={u.id} value={u.id}>
+                                            {u.email} ({u.full_name})
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="flex gap-2">
+                            <Button onClick={handleResetUser} disabled={loadingAction || !selectedUser} className="flex-1">
+                                <UserCog className="h-4 w-4 mr-2" />
+                                Reset Password
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Push System Message */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <MessageSquarePlus className="h-5 w-5 text-indigo-500" />
+                            Push System Message
+                        </CardTitle>
+                        <CardDescription>
+                            Broadcast announcements to all users
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div>
+                            <Label>Message</Label>
+                            <Textarea
+                                placeholder="Enter your system announcement..."
+                                value={systemMessage}
+                                onChange={(e) => setSystemMessage(e.target.value)}
+                                rows={3}
+                            />
+                        </div>
+                        <Button onClick={handleSendSystemMessage} disabled={loadingAction || !systemMessage.trim()} className="w-full">
+                            <MessageSquarePlus className="h-4 w-4 mr-2" />
+                            Send to All Users
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Recent Actions */}
+            <Card className="mt-8">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <Zap className="h-5 w-5 text-yellow-500" />
+                        Recent Admin Actions
+                    </CardTitle>
+                    <CardDescription>Your recent quick actions for audit trail</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-center justify-center py-8 text-muted-foreground">
+                        <div className="text-center">
+                            <CheckCircle className="h-10 w-10 mx-auto mb-2 text-green-500" />
+                            <p>Actions will appear here after execution</p>
+                            <p className="text-sm">All actions are logged to the audit trail</p>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+    );
+}

@@ -38,6 +38,12 @@ import {
   GraduationCap,
   Download,
   RefreshCcw,
+  Activity,
+  Server,
+  Database,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 import {
   BarChart,
@@ -66,6 +72,9 @@ interface CompanyUsage {
   employee_count: number;
   document_count: number;
   course_count: number;
+  audit_count: number;
+  incident_count: number;
+  risk_assessment_count: number;
   storage_used_bytes: number;
   storage_limit_bytes: number;
   last_activity_at: string;
@@ -84,6 +93,7 @@ interface GrowthData {
   users: number;
 }
 
+
 const COLORS = ["#3B82F6", "#8B5CF6", "#F59E0B", "#10B981", "#EF4444"];
 
 export default function Analytics() {
@@ -97,6 +107,7 @@ export default function Analytics() {
   const [growthData, setGrowthData] = useState<GrowthData[]>([]);
   const [tierBreakdown, setTierBreakdown] = useState<any[]>([]);
   const [featureUsage, setFeatureUsage] = useState<any[]>([]);
+
 
   // Summary stats
   const [summaryStats, setSummaryStats] = useState({
@@ -155,9 +166,16 @@ export default function Analytics() {
 
       if (error) throw error;
 
-      // For each company, get usage counts
       const usagePromises = (companies || []).map(async (company) => {
-        const [employees, documents, courses, documentStorage] = await Promise.all([
+        const [
+          employees,
+          documents,
+          courses,
+          audits,
+          incidents,
+          riskAssessments,
+          documentStorage,
+        ] = await Promise.all([
           supabase
             .from("team_members")
             .select("id", { count: "exact", head: true })
@@ -168,6 +186,18 @@ export default function Analytics() {
             .eq("company_id", company.id),
           supabase
             .from("courses")
+            .select("id", { count: "exact", head: true })
+            .eq("company_id", company.id),
+          supabase
+            .from("audits")
+            .select("id", { count: "exact", head: true })
+            .eq("company_id", company.id),
+          supabase
+            .from("incidents")
+            .select("id", { count: "exact", head: true })
+            .eq("company_id", company.id),
+          supabase
+            .from("risk_assessments")
             .select("id", { count: "exact", head: true })
             .eq("company_id", company.id),
           supabase
@@ -187,6 +217,9 @@ export default function Analytics() {
           employee_count: employees.count || 0,
           document_count: documents.count || 0,
           course_count: courses.count || 0,
+          audit_count: audits.count || 0,
+          incident_count: incidents.count || 0,
+          risk_assessment_count: riskAssessments.count || 0,
           storage_used_bytes: totalStorage,
           storage_limit_bytes: 5368709120, // 5GB default limit
         };
@@ -251,7 +284,7 @@ export default function Analytics() {
     try {
       // Count usage of different features across all companies
       const [employees, documents, courses, audits, incidents, riskAssessments] = await Promise.all([
-        supabase.from("employees").select("id", { count: "exact", head: true }),
+        supabase.from("team_members").select("id", { count: "exact", head: true }),
         supabase.from("documents").select("id", { count: "exact", head: true }),
         supabase.from("courses").select("id", { count: "exact", head: true }),
         supabase.from("audits").select("id", { count: "exact", head: true }),
@@ -341,6 +374,7 @@ export default function Analytics() {
           </Button>
         </div>
       </div>
+
 
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -542,6 +576,9 @@ export default function Analytics() {
                 <TableHead>Employees</TableHead>
                 <TableHead>Documents</TableHead>
                 <TableHead>Courses</TableHead>
+                <TableHead>Audits</TableHead>
+                <TableHead>Incidents</TableHead>
+                <TableHead>Risks</TableHead>
                 <TableHead>Storage</TableHead>
                 <TableHead>Last Active</TableHead>
               </TableRow>
@@ -583,6 +620,9 @@ export default function Analytics() {
                   </TableCell>
                   <TableCell>{company.document_count}</TableCell>
                   <TableCell>{company.course_count}</TableCell>
+                  <TableCell>{company.audit_count}</TableCell>
+                  <TableCell>{company.incident_count}</TableCell>
+                  <TableCell>{company.risk_assessment_count}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span className="text-sm">
