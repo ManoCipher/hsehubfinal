@@ -609,10 +609,10 @@ export default function CompanyDetail() {
                 <TabsContent value="overview" className="space-y-4">
                     {/* Subscription Status Card - Most Important */}
                     <Card className={`border-2 ${company.subscription_status === "trial"
-                        ? "border-orange-300 bg-orange-50 dark:border-orange-600 dark:bg-orange-950/30"
-                        : company.subscription_status === "active"
-                            ? "border-green-300 bg-green-50 dark:border-green-600 dark:bg-green-950/30"
-                            : "border-red-300 bg-red-50 dark:border-red-600 dark:bg-red-950/30"
+                            ? "border-orange-300 bg-orange-50 dark:border-orange-600 dark:bg-orange-950/30"
+                            : company.subscription_status === "active"
+                                ? "border-green-300 bg-green-50 dark:border-green-600 dark:bg-green-950/30"
+                                : "border-red-300 bg-red-50 dark:border-red-600 dark:bg-red-950/30"
                         }`}>
                         <CardHeader>
                             <div className="flex items-center justify-between">
@@ -1228,6 +1228,6 @@ export default function CompanyDetail() {
                 </DialogContent>
             </Dialog>
 
-        </div>
+        </div >
     );
 }
