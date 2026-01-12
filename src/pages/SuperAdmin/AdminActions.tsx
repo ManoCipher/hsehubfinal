@@ -49,7 +49,8 @@ import {
 interface Company {
     id: string;
     name: string;
-    status: string;
+    is_blocked: boolean;
+    subscription_status: string;
 }
 
 interface User {
@@ -93,7 +94,7 @@ export default function AdminActions() {
     const fetchCompanies = async () => {
         const { data } = await supabase
             .from("companies")
-            .select("id, name, status")
+            .select("id, name, is_blocked, subscription_status")
             .order("name");
         if (data) setCompanies(data);
     };
@@ -156,28 +157,28 @@ export default function AdminActions() {
     };
 
     // Action: Lock/Unlock Company
-    const handleToggleCompanyLock = async (companyId: string, currentStatus: string) => {
+    const handleToggleCompanyLock = async (companyId: string, isBlocked: boolean) => {
         setLoadingAction(true);
         try {
-            const newStatus = currentStatus === "blocked" ? "active" : "blocked";
+            const newBlockedStatus = !isBlocked;
             const { error } = await supabase
                 .from("companies")
-                .update({ status: newStatus })
+                .update({ is_blocked: newBlockedStatus })
                 .eq("id", companyId);
 
             if (error) throw error;
 
             const company = companies.find(c => c.id === companyId);
             await logAuditAction(
-                newStatus === "blocked" ? "block_company" : "unblock_company",
+                newBlockedStatus ? "block_company" : "unblock_company",
                 "company",
                 company?.name || companyId,
-                { previous_status: currentStatus, new_status: newStatus }
+                { previous_blocked_status: isBlocked, new_blocked_status: newBlockedStatus }
             );
 
             toast({
                 title: "Success",
-                description: `Company ${newStatus === "blocked" ? "locked" : "unlocked"} successfully`,
+                description: `Company ${newBlockedStatus ? "locked" : "unlocked"} successfully`,
             });
             fetchCompanies();
         } catch (error: any) {
@@ -394,17 +395,17 @@ export default function AdminActions() {
                                     <div className="flex items-center gap-2">
                                         <Building2 className="h-4 w-4 text-muted-foreground" />
                                         <span className="text-sm font-medium">{company.name}</span>
-                                        <Badge variant={company.status === "blocked" ? "destructive" : "outline"}>
-                                            {company.status}
+                                        <Badge variant={company.is_blocked ? "destructive" : "outline"}>
+                                            {company.is_blocked ? "Blocked" : "Active"}
                                         </Badge>
                                     </div>
                                     <Button
                                         size="sm"
-                                        variant={company.status === "blocked" ? "default" : "destructive"}
-                                        onClick={() => handleToggleCompanyLock(company.id, company.status)}
+                                        variant={company.is_blocked ? "default" : "destructive"}
+                                        onClick={() => handleToggleCompanyLock(company.id, company.is_blocked)}
                                         disabled={loadingAction}
                                     >
-                                        {company.status === "blocked" ? (
+                                        {company.is_blocked ? (
                                             <><Unlock className="h-3 w-3 mr-1" /> Unlock</>
                                         ) : (
                                             <><Lock className="h-3 w-3 mr-1" /> Lock</>

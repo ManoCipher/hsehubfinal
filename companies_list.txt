@@ -1,0 +1,4 @@
+--- Active Companies ---
+- freelancecomm [trial] (e273dbe1-85c3-422b-8bdd-1faa2b2f611e)
+
+--- Blocked/Inactive Companies ---
