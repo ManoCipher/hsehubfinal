@@ -21,6 +21,7 @@ import {
   Puzzle,
   LayoutDashboard,
   BarChart3,
+  Zap,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -153,6 +154,10 @@ export default function MainLayout({ children }: Props) {
               <Link to="/super-admin/security" className={getLinkClasses("/super-admin/security")}>
                 <Shield className="w-4 h-4" />
                 <span>Security</span>
+              </Link>
+              <Link to="/super-admin/admin-actions" className={getLinkClasses("/super-admin/admin-actions")}>
+                <Zap className="w-4 h-4" />
+                <span>Admin</span>
               </Link>
               <Link to="/super-admin/support" className={getLinkClasses("/super-admin/support")}>
                 <MessageSquare className="w-4 h-4" />

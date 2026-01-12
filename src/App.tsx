@@ -40,6 +40,7 @@ import SuperAdminCompanyDetail from "./pages/SuperAdmin/CompanyDetail";
 import SuperAdminUsers from "./pages/SuperAdmin/Users";
 import SuperAdminSystemLogs from "./pages/SuperAdmin/SystemLogs";
 import SuperAdminSecurity from "./pages/SuperAdmin/Security";
+import SuperAdminAdminActions from "./pages/SuperAdmin/AdminActions";
 import SuperAdminSupport from "./pages/SuperAdmin/Support";
 import AuthDebug from "./pages/AuthDebug";
 import NotFound from "./pages/NotFound";
@@ -161,6 +162,16 @@ const App = () => (
                   <SuperAdminRoute>
                     <MainLayout>
                       <SuperAdminSecurity />
+                    </MainLayout>
+                  </SuperAdminRoute>
+                }
+              />
+              <Route
+                path="/super-admin/admin-actions"
+                element={
+                  <SuperAdminRoute>
+                    <MainLayout>
+                      <SuperAdminAdminActions />
                     </MainLayout>
                   </SuperAdminRoute>
                 }
