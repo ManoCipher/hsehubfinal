@@ -131,6 +131,45 @@ export default function Analytics() {
     }
   }, [user, userRole, dateRange]);
 
+  // Realtime subscriptions for automatic updates
+  useEffect(() => {
+    if (!user || userRole !== "super_admin") return;
+
+    console.log('Setting up realtime subscriptions for Analytics...');
+
+    // Subscribe to changes on all feature tables
+    const tables = ['employees', 'documents', 'courses', 'audits', 'incidents', 'risk_assessments'];
+    const channels = tables.map(table => {
+      const channel = supabase
+        .channel(`${table}_changes`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*', // Listen to INSERT, UPDATE, DELETE
+            schema: 'public',
+            table: table
+          },
+          (payload) => {
+            console.log(`Realtime change detected in ${table}:`, payload);
+            // Refetch feature usage when any change occurs
+            fetchFeatureUsage();
+          }
+        )
+        .subscribe();
+
+      return channel;
+    });
+
+    // Cleanup subscriptions on unmount
+    return () => {
+      console.log('Cleaning up realtime subscriptions...');
+      channels.forEach(channel => {
+        supabase.removeChannel(channel);
+      });
+    };
+  }, [user, userRole]);
+
+
   const fetchAnalytics = async () => {
     setLoadingData(true);
     await Promise.all([
@@ -177,7 +216,7 @@ export default function Analytics() {
           documentStorage,
         ] = await Promise.all([
           supabase
-            .from("team_members")
+            .from("employees")
             .select("id", { count: "exact", head: true })
             .eq("company_id", company.id),
           supabase
@@ -282,15 +321,32 @@ export default function Analytics() {
 
   const fetchFeatureUsage = async () => {
     try {
+      console.log('Fetching feature usage...');
       // Count usage of different features across all companies
       const [employees, documents, courses, audits, incidents, riskAssessments] = await Promise.all([
-        supabase.from("team_members").select("id", { count: "exact", head: true }),
+        supabase.from("employees").select("id", { count: "exact", head: true }),
         supabase.from("documents").select("id", { count: "exact", head: true }),
         supabase.from("courses").select("id", { count: "exact", head: true }),
         supabase.from("audits").select("id", { count: "exact", head: true }),
         supabase.from("incidents").select("id", { count: "exact", head: true }),
         supabase.from("risk_assessments").select("id", { count: "exact", head: true }),
       ]);
+
+      console.log('Feature usage results:', {
+        employees: employees.count,
+        documents: documents.count,
+        courses: courses.count,
+        audits: audits.count,
+        incidents: incidents.count,
+        riskAssessments: riskAssessments.count,
+      });
+
+      console.log('Employees error:', employees.error);
+      console.log('Documents error:', documents.error);
+      console.log('Courses error:', courses.error);
+      console.log('Audits error:', audits.error);
+      console.log('Incidents error:', incidents.error);
+      console.log('Risk Assessments error:', riskAssessments.error);
 
       setFeatureUsage([
         { name: "Employees", count: employees.count || 0 },
@@ -300,6 +356,8 @@ export default function Analytics() {
         { name: "Incidents", count: incidents.count || 0 },
         { name: "Risk Assessments", count: riskAssessments.count || 0 },
       ]);
+
+      console.log('Feature usage state updated');
     } catch (error) {
       console.error("Error fetching feature usage:", error);
     }
