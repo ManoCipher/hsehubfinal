@@ -62,6 +62,7 @@ import {
     PieChart,
     Pie,
     Cell,
+    Legend,
 } from "recharts";
 
 interface SupportTicket {
@@ -448,24 +449,32 @@ export default function Support() {
                         <CardDescription>Distribution of ticket priorities</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="h-[250px]">
+                        <div className="h-[300px]">
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie
                                         data={priorityBreakdown}
                                         cx="50%"
-                                        cy="50%"
+                                        cy="45%"
                                         innerRadius={60}
                                         outerRadius={90}
                                         paddingAngle={5}
                                         dataKey="value"
-                                        label={({ name, value }) => `${name}: ${value}`}
                                     >
                                         {priorityBreakdown.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={entry.color} />
                                         ))}
                                     </Pie>
                                     <Tooltip />
+                                    <Legend
+                                        verticalAlign="bottom"
+                                        height={36}
+                                        formatter={(value, entry: any) => (
+                                            <span className="text-sm">
+                                                {entry.payload.name}: {entry.payload.value}
+                                            </span>
+                                        )}
+                                    />
                                 </PieChart>
                             </ResponsiveContainer>
                         </div>
