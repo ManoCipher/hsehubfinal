@@ -483,79 +483,79 @@ export default function SuperAdminDashboard() {
             </div>
           </CardContent>
         </Card>
-      </div>
 
-      {/* Recent Companies */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Recent Companies</CardTitle>
-              <CardDescription>
-                Latest registered organizations
-              </CardDescription>
+        {/* Recent Companies */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Recent Companies</CardTitle>
+                <CardDescription>
+                  Latest registered organizations
+                </CardDescription>
+              </div>
+              <Link
+                to="/super-admin/companies"
+                className="text-sm text-primary hover:underline"
+              >
+                View All →
+              </Link>
             </div>
-            <Link
-              to="/super-admin/companies"
-              className="text-sm text-primary hover:underline"
-            >
-              View All →
-            </Link>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {recentCompanies.length === 0 ? (
-              <p className="text-center py-8 text-muted-foreground">
-                No companies registered yet
-              </p>
-            ) : (
-              recentCompanies.map((company) => (
-                <div
-                  key={company.id}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Building2 className="w-5 h-5 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {recentCompanies.length === 0 ? (
+                <p className="text-center py-8 text-muted-foreground">
+                  No companies registered yet
+                </p>
+              ) : (
+                recentCompanies.map((company) => (
+                  <div
+                    key={company.id}
+                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Building2 className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium">{company.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {company.email}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium">{company.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {company.email}
-                      </p>
+                    <div className="flex items-center gap-4">
+                      <Badge
+                        variant={
+                          company.subscription_status === "active"
+                            ? "default"
+                            : company.subscription_status === "trial"
+                              ? "secondary"
+                              : "outline"
+                        }
+                      >
+                        {company.subscription_tier}
+                      </Badge>
+                      <Badge
+                        variant={
+                          company.subscription_status === "active"
+                            ? "default"
+                            : company.subscription_status === "trial"
+                              ? "secondary"
+                              : "destructive"
+                        }
+                      >
+                        {company.subscription_status}
+                      </Badge>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <Badge
-                      variant={
-                        company.subscription_status === "active"
-                          ? "default"
-                          : company.subscription_status === "trial"
-                            ? "secondary"
-                            : "outline"
-                      }
-                    >
-                      {company.subscription_tier}
-                    </Badge>
-                    <Badge
-                      variant={
-                        company.subscription_status === "active"
-                          ? "default"
-                          : company.subscription_status === "trial"
-                            ? "secondary"
-                            : "destructive"
-                      }
-                    >
-                      {company.subscription_status}
-                    </Badge>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </CardContent>
-      </Card>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
