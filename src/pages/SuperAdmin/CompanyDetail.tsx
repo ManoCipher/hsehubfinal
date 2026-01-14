@@ -355,6 +355,30 @@ export default function CompanyDetail() {
         }
     };
 
+    const getUserActivityStatus = () => {
+        if (users.length === 0) {
+            return { label: "inactive", color: "red", dotClass: "bg-red-500" };
+        }
+
+        const activeUsers = users.filter(u => u.last_login_at);
+        const activeRatio = activeUsers.length / users.length;
+
+        // Check for trial/subscription expiry
+        const daysUntilExpiry = company?.trial_ends_at
+            ? Math.ceil((new Date(company.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+            : null;
+
+        if (daysUntilExpiry !== null && daysUntilExpiry <= 7 && daysUntilExpiry > 0) {
+            return { label: "about to expire", color: "yellow", dotClass: "bg-yellow-500" };
+        }
+
+        if (activeRatio < 0.3) {
+            return { label: "inactive", color: "red", dotClass: "bg-red-500" };
+        }
+
+        return { label: "active & healthy", color: "green", dotClass: "bg-green-500" };
+    };
+
     const handleBlockCompany = async () => {
         if (!blockReason.trim()) {
             toast({
@@ -733,13 +757,11 @@ export default function CompanyDetail() {
                                     <p className="text-xl font-bold capitalize">{company.subscription_tier}</p>
                                 </div>
                                 <div>
-                                    <Label className="text-muted-foreground text-sm">
-                                        {company.subscription_status === "trial" ? "Trial Ends" : "Subscription Status"}
-                                    </Label>
+                                    <Label className="text-muted-foreground text-sm">Subscription & Trial</Label>
                                     {company.subscription_status === "trial" ? (
                                         <>
                                             <p className="text-xl font-bold text-orange-600 dark:text-orange-400">
-                                                {company.trial_ends_at
+                                                Trial - Ends {company.trial_ends_at
                                                     ? new Date(company.trial_ends_at).toLocaleDateString()
                                                     : "Not set"}
                                             </p>
@@ -749,10 +771,22 @@ export default function CompanyDetail() {
                                                 </p>
                                             )}
                                         </>
+                                    ) : company.subscription_status === "canceled" ? (
+                                        <>
+                                            <p className="text-xl font-bold text-red-600 dark:text-red-400">Canceled</p>
+                                            <p className="text-sm text-red-600 dark:text-red-400">
+                                                Access ends on {company.trial_ends_at ? new Date(company.trial_ends_at).toLocaleDateString() : "N/A"}
+                                            </p>
+                                        </>
                                     ) : (
-                                        <p className="text-xl font-bold capitalize text-green-600 dark:text-green-400">
-                                            {company.subscription_status}
-                                        </p>
+                                        <>
+                                            <p className="text-xl font-bold capitalize text-green-600 dark:text-green-400">
+                                                {company.subscription_status}
+                                            </p>
+                                            <p className="text-sm text-green-600 dark:text-green-400">
+                                                {company.subscription_tier} subscription active
+                                            </p>
+                                        </>
                                     )}
                                 </div>
                                 <div>
@@ -797,19 +831,18 @@ export default function CompanyDetail() {
 
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Created</CardTitle>
-                                <Clock className="h-4 w-4 text-muted-foreground" />
+                                <CardTitle className="text-sm font-medium">User Activity</CardTitle>
+                                <Activity className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">
-                                    {new Date(company.created_at).toLocaleDateString()}
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-4 h-4 rounded-full ${getUserActivityStatus().dotClass}`} />
+                                    <div className="text-xl font-bold capitalize">
+                                        {getUserActivityStatus().label}
+                                    </div>
                                 </div>
-                                <p className="text-xs text-muted-foreground">
-                                    {Math.floor(
-                                        (Date.now() - new Date(company.created_at).getTime()) /
-                                        (1000 * 60 * 60 * 24)
-                                    )}{" "}
-                                    days ago
+                                <p className="text-xs text-muted-foreground mt-2">
+                                    {users.filter(u => u.last_login_at).length} of {users.length} users active
                                 </p>
                             </CardContent>
                         </Card>
