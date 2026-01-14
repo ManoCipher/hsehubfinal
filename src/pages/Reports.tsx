@@ -392,8 +392,12 @@ export default function Reports() {
       case "last_year":
         startDate.setFullYear(endDate.getFullYear() - 1);
         break;
+      case "all_time":
+        startDate.setFullYear(endDate.getFullYear() - 10); // 10 years back
+        break;
       default:
-        startDate.setDate(endDate.getDate() - 30);
+        // Default to all time to ensure data is captured
+        startDate.setFullYear(endDate.getFullYear() - 10);
     }
 
     return {
@@ -408,44 +412,205 @@ export default function Reports() {
     const { metric, groupBy, dateRange } = template;
     const { startDate, endDate } = calculateDateRange(dateRange);
 
-    let table: string;
-    let groupColumn: string;
-
-    // Map metric to Supabase table and column
-    switch (metric) {
-      case "employees":
-        table = "employees";
-        groupColumn = groupBy || "department";
-        break;
-      case "incidents":
-        table = "incidents";
-        groupColumn = groupBy || "status";
-        break;
-      case "audits":
-        table = "audits";
-        groupColumn = groupBy || "status";
-        break;
-      case "trainings":
-        table = "courses";
-        groupColumn = groupBy || "status";
-        break;
-      case "risks":
-        table = "risk_assessments";
-        groupColumn = groupBy || "priority";
-        break;
-      case "measures":
-        table = "measures";
-        groupColumn = groupBy || "status";
-        break;
-      case "checkups":
-        table = "employee_checkups";
-        groupColumn = groupBy || "status";
-        break;
-      default:
-        return [];
-    }
-
     try {
+      // Special handling for employees with department/location joins
+      if (metric === "employees") {
+        if (groupBy === "department") {
+          // Join with departments table to get department names
+          const { data, error } = await supabase
+            .from("employees")
+            .select("department_id, departments(name)")
+            .eq("company_id", companyId);
+
+          if (error) {
+            console.error("Error fetching employee data:", error);
+            return [];
+          }
+
+          // Group by department name
+          const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+            const deptName = item.departments?.name || "Unassigned";
+            acc[deptName] = (acc[deptName] || 0) + 1;
+            return acc;
+          }, {});
+
+          return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+        } else if (groupBy === "location") {
+          // Location doesn't exist on employees table, use department as fallback
+          const { data, error } = await supabase
+            .from("employees")
+            .select("department_id, departments(name)")
+            .eq("company_id", companyId);
+
+          if (error) {
+            console.error("Error fetching employee location data:", error);
+            return [];
+          }
+
+          const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+            const deptName = item.departments?.name || "Unassigned";
+            acc[deptName] = (acc[deptName] || 0) + 1;
+            return acc;
+          }, {});
+
+          return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+        } else if (groupBy === "created_at") {
+          // Group by month for time-based reports
+          const { data, error } = await supabase
+            .from("employees")
+            .select("created_at")
+            .eq("company_id", companyId)
+            .gte("created_at", startDate)
+            .lte("created_at", endDate);
+
+          if (error) {
+            console.error("Error fetching employee time data:", error);
+            return [];
+          }
+
+          const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+            if (!item.created_at) return acc;
+            const date = new Date(item.created_at);
+            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            acc[monthKey] = (acc[monthKey] || 0) + 1;
+            return acc;
+          }, {});
+
+          return Object.entries(grouped)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([name, value]) => ({ name, value }));
+        }
+      }
+
+      // Standard handling for other metrics
+      let table: string;
+      let groupColumn: string;
+
+      switch (metric) {
+        case "incidents":
+          // Special handling for incidents - use incident_date instead of created_at
+          {
+            // Determine which column to group by
+            let incidentGroupCol = "investigation_status";
+            if (groupBy === "category" || groupBy === "incident_type") {
+              incidentGroupCol = "incident_type";
+            } else if (groupBy === "severity") {
+              incidentGroupCol = "severity";
+            } else if (groupBy === "investigation_status" || groupBy === "status") {
+              incidentGroupCol = "investigation_status";
+            }
+
+            const { data, error } = await supabase
+              .from("incidents")
+              .select(incidentGroupCol)
+              .eq("company_id", companyId);
+
+            if (error) {
+              console.error("Error fetching incidents data:", error);
+              return [];
+            }
+
+            // Group and count
+            const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+              const key = item[incidentGroupCol] || "Unknown";
+              acc[key] = (acc[key] || 0) + 1;
+              return acc;
+            }, {});
+
+            return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+          }
+          break;
+        case "audits":
+          table = "audits";
+          if (groupBy === "category") {
+            groupColumn = "audit_type";
+          } else {
+            groupColumn = groupBy || "status";
+          }
+          break;
+        case "trainings":
+          // Courses are catalog items, don't filter by date
+          // Query all courses and group by name (each course is 1 item)
+          {
+            const { data, error } = await supabase
+              .from("courses")
+              .select("id, name")
+              .eq("company_id", companyId);
+
+            if (error) {
+              console.error("Error fetching courses data:", error);
+              return [];
+            }
+
+            // Return each course as a data point
+            return (data || []).map(course => ({
+              name: course.name,
+              value: 1,
+            }));
+          }
+          break;
+        case "risks":
+          table = "risk_assessments";
+          groupColumn = groupBy || "risk_level";
+          break;
+        case "measures":
+          table = "measures";
+          groupColumn = groupBy || "status";
+          break;
+        case "checkups":
+          // Special handling for health checkups
+          {
+            const { data, error } = await supabase
+              .from("health_checkups")
+              .select("status")
+              .eq("company_id", companyId);
+
+            if (error) {
+              console.error("Error fetching health checkups data:", error);
+              return [];
+            }
+
+            // Group by status
+            const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+              const key = item.status || "Unknown";
+              acc[key] = (acc[key] || 0) + 1;
+              return acc;
+            }, {});
+
+            return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+          }
+          break;
+        default:
+          return [];
+      }
+
+      // Handle time-based grouping for other metrics
+      if (groupBy === "created_at") {
+        const { data, error } = await supabase
+          .from(table as any)
+          .select("created_at")
+          .eq("company_id", companyId)
+          .gte("created_at", startDate)
+          .lte("created_at", endDate);
+
+        if (error) {
+          console.error("Error fetching time data:", error);
+          return [];
+        }
+
+        const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+          if (!item.created_at) return acc;
+          const date = new Date(item.created_at);
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          acc[monthKey] = (acc[monthKey] || 0) + 1;
+          return acc;
+        }, {});
+
+        return Object.entries(grouped)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([name, value]) => ({ name, value }));
+      }
+
       const { data, error } = await supabase
         .from(table as any)
         .select(groupColumn)
@@ -852,6 +1017,55 @@ function OverviewSection({
       description: "Dashboard layout has been reset to default",
     });
   }, [toast]);
+
+  // Sync custom reports layout when reports change (add/remove)
+  useEffect(() => {
+    setCustomReportsLayouts(currentLayouts => {
+      const newLayouts = { ...currentLayouts };
+      const breakpoints = ['lg', 'md', 'sm'];
+      let hasChanges = false;
+
+      breakpoints.forEach(bp => {
+        const bpLayout = [...(newLayouts[bp] || [])];
+
+        // Add specific layout items for new reports
+        if (customReports.length > bpLayout.length) {
+          hasChanges = true;
+          for (let i = bpLayout.length; i < customReports.length; i++) {
+            bpLayout.push({
+              i: `custom-report-${i}`,
+              x: (i % 3) * 4,
+              y: Math.floor(i / 3) * 6, // Place below previous ones
+              w: 4,
+              h: 6,
+              minW: 3,
+              minH: 4,
+              static: false,
+            });
+          }
+        }
+        // Handle removals
+        else if (customReports.length < bpLayout.length) {
+          hasChanges = true;
+          newLayouts[bp] = bpLayout.slice(0, customReports.length);
+          return;
+        }
+
+        newLayouts[bp] = bpLayout;
+      });
+
+      if (!hasChanges) return currentLayouts;
+
+      // Save new state
+      try {
+        localStorage.setItem(CUSTOM_REPORTS_LAYOUT_KEY, JSON.stringify(newLayouts));
+      } catch (e) {
+        console.error("Error saving updated custom layout:", e);
+      }
+
+      return newLayouts;
+    });
+  }, [customReports.length]);
 
   return (
     <div className="space-y-8">

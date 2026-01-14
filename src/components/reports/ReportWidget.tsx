@@ -47,16 +47,20 @@ export default function ReportWidget({
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Generate sample/mock data if none provided
-  const chartData = data.length > 0 ? data : [
-    { name: 'Category A', value: 12 },
-    { name: 'Category B', value: 19 },
-    { name: 'Category C', value: 8 },
-    { name: 'Category D', value: 15 },
-    { name: 'Category E', value: 6 },
-  ];
+  const chartData = (data && data.length > 0) ? data : (config.data || []);
+  const hasData = chartData && chartData.length > 0;
 
   const renderChart = () => {
     const height = isFullscreen ? 500 : 250;
+
+    if (!hasData) {
+      return (
+        <div className="flex flex-col items-center justify-center p-6 text-muted-foreground border-2 border-dashed rounded-lg h-full min-h-[200px]">
+          <GripVertical className="w-8 h-8 mb-2 opacity-20" />
+          <p className="text-sm">No data available</p>
+        </div>
+      );
+    }
 
     switch (config.chartType) {
       case 'pie':
@@ -82,7 +86,7 @@ export default function ReportWidget({
             </RechartsPie>
           </ResponsiveContainer>
         );
-      
+
       case 'bar':
         return (
           <ResponsiveContainer width="100%" height={height}>
@@ -96,7 +100,7 @@ export default function ReportWidget({
             </BarChart>
           </ResponsiveContainer>
         );
-      
+
       case 'line':
         return (
           <ResponsiveContainer width="100%" height={height}>
@@ -140,34 +144,62 @@ export default function ReportWidget({
   }
 
   return (
-    <Card className="dashboard-grid-card hover:shadow-lg transition-shadow h-full flex flex-col">
-      <div className="drag-handle border-b cursor-move hover:bg-muted transition-colors p-2 flex items-center justify-center">
-        <GripVertical className="w-4 h-4 text-muted-foreground" />
+    <Card className="dashboard-grid-card hover:shadow-lg transition-shadow h-full flex flex-col overflow-hidden">
+      <div className="drag-handle border-b cursor-move hover:bg-muted/50 transition-colors p-1 flex items-center justify-center bg-muted/10 h-4">
+        <GripVertical className="w-3 h-3 text-muted-foreground/30" />
       </div>
-      <CardHeader className="pb-3 flex-shrink-0">
-        <div className="flex items-start justify-between">
-          <div>
-            <CardTitle className="text-base">{config.title}</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">
-              {config.groupBy.charAt(0).toUpperCase() + config.groupBy.slice(1)} •{" "}
-              {config.dateRange.type.replace(/_/g, ' ')}
-            </p>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-            onClick={() => onDelete(config.id)}
-            title="Delete report"
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
+
+      <CardHeader className="p-3 pb-0 flex-row items-center justify-between space-y-0 gap-2 shrink-0">
+        <div className="min-w-0 flex-1">
+          <CardTitle className="text-sm font-semibold truncate leading-tight" title={config.title}>
+            {config.title}
+          </CardTitle>
+          <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+            {config.metric === 'incidents' ? `Type: ${config.incidentType || 'All'}` :
+              config.metric === 'audits' ? `Template: ${config.auditTemplate || 'All'}` :
+                `Group: ${config.groupBy}`}
+          </p>
         </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-6 w-6 p-0 shrink-0">
+              <MoreVertical className="h-3 w-3" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={toggleFullscreen}>
+              <Maximize2 className="mr-2 h-4 w-4" />
+              Fullscreen
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onEdit(config)}>
+              <Edit className="mr-2 h-4 w-4" />
+              Edit Report
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onDuplicate(config)}>
+              <Copy className="mr-2 h-4 w-4" />
+              Duplicate
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onExport(config)}>
+              <Download className="mr-2 h-4 w-4" />
+              Export Data
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={() => onDelete(config.id)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col">
-        {renderChart()}
-        <div className="mt-3 text-xs text-muted-foreground">
-          Total: {chartData.reduce((sum, d) => sum + d.value, 0)} items
+
+      <CardContent className="flex-1 p-2 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-[120px]">
+          {renderChart()}
+        </div>
+        <div className="mt-1 text-[10px] text-muted-foreground text-center border-t pt-1">
+          Total: {chartData.reduce((sum, d) => sum + d.value, 0)}
         </div>
       </CardContent>
     </Card>

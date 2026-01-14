@@ -44,21 +44,21 @@ const REPORT_TEMPLATES = [
       {
         title: "Incidents by Status",
         metric: "incidents",
-        groupBy: "status",
+        groupBy: "investigation_status",
         chartType: "pie" as const,
         description: "Overview of incident statuses",
       },
       {
         title: "Incidents by Category",
         metric: "incidents",
-        groupBy: "category",
+        groupBy: "incident_type",
         chartType: "bar" as const,
         description: "Breakdown by incident type",
       },
       {
         title: "Open vs Closed Trends",
         metric: "incidents",
-        groupBy: "status",
+        groupBy: "created_at",
         chartType: "line" as const,
         description: "Track incident resolution over time",
       },
@@ -71,7 +71,7 @@ const REPORT_TEMPLATES = [
       {
         title: "Audits by ISO Code",
         metric: "audits",
-        groupBy: "category",
+        groupBy: "iso_code",
         chartType: "bar" as const,
         description: "Distribution of audit standards",
       },

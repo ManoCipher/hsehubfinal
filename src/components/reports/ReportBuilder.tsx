@@ -41,6 +41,8 @@ export interface ReportConfig {
   chartType: 'pie' | 'bar' | 'line';
   sortBy: string;
   data?: any[]; // Optional data from fetched results
+  incidentType?: string;
+  auditTemplate?: string;
 }
 
 interface ReportBuilderProps {
@@ -89,20 +91,22 @@ export default function ReportBuilder({
   // Generate sample/mock data based on config
   const getChartData = () => {
     if (data && data.length > 0) return data;
-
-    // Mock data for demonstration
-    return [
-      { name: 'Safety', value: 12 },
-      { name: 'Quality', value: 19 },
-      { name: 'Production', value: 8 },
-      { name: 'Maintenance', value: 15 },
-      { name: 'HR', value: 6 },
-    ];
+    return [];
   };
 
   const chartData = getChartData();
+  const hasData = chartData.length > 0;
 
   const renderChart = () => {
+    if (!hasData) {
+      return (
+        <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground border-2 border-dashed rounded-lg">
+          <BarChart3 className="w-8 h-8 mb-2 opacity-20" />
+          <p>No data available for this report</p>
+        </div>
+      );
+    }
+
     switch (config.chartType) {
       case 'pie':
         return (
