@@ -75,7 +75,9 @@ export default function AdminActions() {
     // Dialog states
     const [extendTrialDays, setExtendTrialDays] = useState("7");
     const [systemMessage, setSystemMessage] = useState("");
-    const [invoiceCorrection, setInvoiceCorrection] = useState({ amount: "", reason: "" });
+    const [invoiceCorrection, setInvoiceCorrection] = useState({ invoiceNumber: "", amount: "", reason: "" });
+    const [invoices, setInvoices] = useState<{ id: string; invoice_number: string; company_id: string }[]>([]);
+    const [recentActions, setRecentActions] = useState<any[]>([]);
 
     useEffect(() => {
         if (!loading && (!user || userRole !== "super_admin")) {
@@ -88,6 +90,8 @@ export default function AdminActions() {
             fetchCompanies();
             fetchUsers();
             fetchAddons();
+            fetchInvoices();
+            fetchRecentActions();
         }
     }, [user, userRole]);
 
@@ -144,6 +148,25 @@ export default function AdminActions() {
         if (data) setAddons(data);
     };
 
+    const fetchInvoices = async () => {
+        const { data } = await supabase
+            .from("invoices")
+            .select("id, invoice_number, company_id")
+            .order("created_at", { ascending: false })
+            .limit(100);
+        if (data) setInvoices(data);
+    };
+
+    const fetchRecentActions = async () => {
+        const { data } = await supabase
+            .from("audit_logs")
+            .select("*")
+            .eq("actor_email", user?.email)
+            .order("created_at", { ascending: false })
+            .limit(10);
+        if (data) setRecentActions(data);
+    };
+
     const logAuditAction = async (actionType: string, targetType: string, targetName: string, details?: any) => {
         await supabase.from("audit_logs").insert({
             actor_email: user?.email,
@@ -181,6 +204,7 @@ export default function AdminActions() {
                 description: `Company ${newBlockedStatus ? "locked" : "unlocked"} successfully`,
             });
             fetchCompanies();
+            fetchRecentActions();
         } catch (error: any) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
         } finally {
@@ -223,6 +247,7 @@ export default function AdminActions() {
                 title: "Trial Extended",
                 description: `Trial extended by ${extendTrialDays} days`,
             });
+            fetchRecentActions();
         } catch (error: any) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
         } finally {
@@ -281,6 +306,7 @@ export default function AdminActions() {
                 title: "Password Reset Initiated",
                 description: `Password reset email sent to ${selectedUserData?.email}`,
             });
+            fetchRecentActions();
         } catch (error: any) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
         } finally {
@@ -314,6 +340,7 @@ export default function AdminActions() {
 
             toast({ title: "Success", description: "System message sent to all users" });
             setSystemMessage("");
+            fetchRecentActions();
         } catch (error: any) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
         } finally {
@@ -323,7 +350,7 @@ export default function AdminActions() {
 
     // Action: Correct Invoice
     const handleCorrectInvoice = async () => {
-        if (!selectedCompany || !invoiceCorrection.amount || !invoiceCorrection.reason) {
+        if (!selectedCompany || !invoiceCorrection.invoiceNumber || !invoiceCorrection.amount || !invoiceCorrection.reason) {
             toast({ title: "Error", description: "Please fill all fields", variant: "destructive" });
             return;
         }
@@ -331,12 +358,14 @@ export default function AdminActions() {
         try {
             const company = companies.find(c => c.id === selectedCompany);
             await logAuditAction("correct_invoice", "invoice", company?.name || selectedCompany, {
+                invoice_number: invoiceCorrection.invoiceNumber,
                 amount: invoiceCorrection.amount,
                 reason: invoiceCorrection.reason,
             });
 
             toast({ title: "Success", description: "Invoice correction logged" });
-            setInvoiceCorrection({ amount: "", reason: "" });
+            setInvoiceCorrection({ invoiceNumber: "", amount: "", reason: "" });
+            fetchRecentActions(); // Refresh recent actions
         } catch (error: any) {
             toast({ title: "Error", description: error.message, variant: "destructive" });
         } finally {
@@ -346,11 +375,18 @@ export default function AdminActions() {
 
     const [showBlockedOnly, setShowBlockedOnly] = useState(false);
 
-    const filteredCompanies = companies.filter(c => {
-        const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesBlocked = showBlockedOnly ? c.is_blocked : true;
-        return matchesSearch && matchesBlocked;
-    });
+    const filteredCompanies = companies
+        .filter(c => {
+            const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesBlocked = showBlockedOnly ? c.is_blocked : true;
+            return matchesSearch && matchesBlocked;
+        })
+        .sort((a, b) => {
+            // Sort blocked companies first
+            if (a.is_blocked && !b.is_blocked) return -1;
+            if (!a.is_blocked && b.is_blocked) return 1;
+            return a.name.localeCompare(b.name);
+        });
 
     if (loading) {
         return (
@@ -405,9 +441,9 @@ export default function AdminActions() {
                                 <Label htmlFor="showBlocked" className="text-sm">Show Blocked Only</Label>
                             </div>
                         </div>
-                        <div className="max-h-48 overflow-y-auto space-y-2">
+                        <div className="max-h-60 overflow-y-auto space-y-2">
                             {filteredCompanies.length > 0 ? (
-                                filteredCompanies.slice(0, 5).map((company) => (
+                                filteredCompanies.map((company) => (
                                     <div key={company.id} className="flex items-center justify-between p-2 border rounded-lg">
                                         <div className="flex items-center gap-2">
                                             <Building2 className="h-4 w-4 text-muted-foreground" />
@@ -436,6 +472,8 @@ export default function AdminActions() {
                         </div>
                     </CardContent>
                 </Card>
+
+
 
                 {/* Extend Trial */}
                 <Card>
@@ -556,6 +594,29 @@ export default function AdminActions() {
                             </Select>
                         </div>
                         <div>
+                            <Label>Invoice Number</Label>
+                            <Select
+                                value={invoiceCorrection.invoiceNumber}
+                                onValueChange={(value) => setInvoiceCorrection({ ...invoiceCorrection, invoiceNumber: value })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select invoice..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {invoices
+                                        .filter(inv => !selectedCompany || inv.company_id === selectedCompany)
+                                        .map((inv) => (
+                                            <SelectItem key={inv.id} value={inv.invoice_number}>
+                                                {inv.invoice_number}
+                                            </SelectItem>
+                                        ))}
+                                    {invoices.filter(inv => !selectedCompany || inv.company_id === selectedCompany).length === 0 && (
+                                        <SelectItem value="none" disabled>No invoices found</SelectItem>
+                                    )}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
                             <Label>Correction Amount (€)</Label>
                             <Input
                                 type="number"
@@ -654,13 +715,37 @@ export default function AdminActions() {
                     <CardDescription>Your recent quick actions for audit trail</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="flex items-center justify-center py-8 text-muted-foreground">
-                        <div className="text-center">
-                            <CheckCircle className="h-10 w-10 mx-auto mb-2 text-green-500" />
-                            <p>Actions will appear here after execution</p>
-                            <p className="text-sm">All actions are logged to the audit trail</p>
+                    {recentActions.length > 0 ? (
+                        <div className="space-y-2">
+                            {recentActions.map((action) => (
+                                <div key={action.id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <Badge variant="outline">{action.action_type?.replace(/_/g, ' ')}</Badge>
+                                            <span className="text-sm font-medium">{action.target_name}</span>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            {action.target_type} • {new Date(action.created_at).toLocaleString()}
+                                        </p>
+                                        {action.details && (
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                {JSON.stringify(action.details).substring(0, 100)}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <CheckCircle className="h-5 w-5 text-green-500" />
+                                </div>
+                            ))}
                         </div>
-                    </div>
+                    ) : (
+                        <div className="flex items-center justify-center py-8 text-muted-foreground">
+                            <div className="text-center">
+                                <AlertTriangle className="h-10 w-10 mx-auto mb-2 text-yellow-500" />
+                                <p>No recent actions</p>
+                                <p className="text-sm">Actions will appear here after execution</p>
+                            </div>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>
