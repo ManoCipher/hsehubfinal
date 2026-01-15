@@ -696,7 +696,8 @@ export default function Reports() {
       });
     }
 
-    saveCustomReports(updatedReports);
+    setCustomReports(updatedReports); // Update state FIRST for immediate UI refresh
+    saveCustomReports(updatedReports); // Then save to localStorage
     setIsBuilderOpen(false);
     setSelectedReport(null);
   };
@@ -838,7 +839,19 @@ export default function Reports() {
         {/* Content Sections */}
         <div className="p-8">
           {activeSection === "overview" && (
-            <OverviewSection stats={stats} chartData={chartData} customReports={customReports} onEditReport={handleEditReport} onDuplicateReport={handleDuplicateReport} onDeleteReport={handleDeleteReport} onExportReport={handleExportReport} />
+            <OverviewSection
+              stats={stats}
+              chartData={chartData}
+              customReports={customReports}
+              onEditReport={handleEditReport}
+              onDuplicateReport={handleDuplicateReport}
+              onDeleteReport={handleDeleteReport}
+              onExportReport={handleExportReport}
+              onViewReport={(report) => {
+                setSelectedReport(report);
+                setIsBuilderOpen(true);
+              }}
+            />
           )}
           {activeSection === "risk-assessments" && (
             <RiskAssessmentsSection stats={stats} chartData={chartData} />
@@ -941,12 +954,12 @@ const generateCustomReportsLayout = (reportCount: number) => {
   for (let i = 0; i < reportCount; i++) {
     layouts.push({
       i: `custom-report-${i}`,
-      x: (i % 3) * 4,
-      y: Math.floor(i / 3) * 6,
-      w: 4,
-      h: 6,
-      minW: 3,
-      minH: 4,
+      x: (i % 4) * 3,  // 4 columns for compact layout
+      y: Math.floor(i / 4) * 3,  // Reduced row spacing
+      w: 3,  // Width: 3 grid units
+      h: 3,  // Height: 3 grid units (180px) - very compact
+      minW: 2,  // Minimum width
+      minH: 2,  // Minimum height
       static: false,
     });
   }
@@ -960,7 +973,8 @@ function OverviewSection({
   onEditReport,
   onDuplicateReport,
   onDeleteReport,
-  onExportReport
+  onExportReport,
+  onViewReport,
 }: {
   stats: ReportStats;
   chartData: any[];
@@ -969,6 +983,7 @@ function OverviewSection({
   onDuplicateReport: (config: ReportConfig) => void;
   onDeleteReport: (id: string) => void;
   onExportReport: (config: ReportConfig) => void;
+  onViewReport: (config: ReportConfig) => void;
 }) {
   const { toast } = useToast();
   // Load layouts from localStorage or use defaults
@@ -1034,12 +1049,12 @@ function OverviewSection({
           for (let i = bpLayout.length; i < customReports.length; i++) {
             bpLayout.push({
               i: `custom-report-${i}`,
-              x: (i % 3) * 4,
-              y: Math.floor(i / 3) * 6, // Place below previous ones
-              w: 4,
-              h: 6,
-              minW: 3,
-              minH: 4,
+              x: (i % 4) * 3,  // 4 columns, width 3
+              y: Math.floor(i / 4) * 3,  // Reduced row spacing
+              w: 3,  // Width: 3 grid units
+              h: 3,  // Height: 3 grid units - compact
+              minW: 2,
+              minH: 2,
               static: false,
             });
           }
@@ -1243,66 +1258,36 @@ function OverviewSection({
         </div>
       </ResponsiveGridLayout>
 
-      {/* Custom Reports Grid */}
+      {/* Custom Reports - Horizontal Scroll */}
       {customReports && customReports.length > 0 && (
         <div className="mt-12">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-lg font-semibold">Custom Reports</h3>
-              <p className="text-sm text-muted-foreground">Drag to reposition, resize from corners</p>
+              <p className="text-sm text-muted-foreground">Click on any report to view details</p>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const defaultLayout = generateCustomReportsLayout(customReports.length);
-                const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
-                setCustomReportsLayouts(defaultLayouts);
-                localStorage.removeItem(CUSTOM_REPORTS_LAYOUT_KEY);
-                toast({
-                  title: "Layout Reset",
-                  description: "Custom reports layout has been reset to default",
-                });
-              }}
-            >
-              <RotateCcw className="w-4 h-4 mr-2" />
-              Reset Layout
-            </Button>
           </div>
 
-          <ResponsiveGridLayout
-            className="layout"
-            layouts={customReportsLayouts}
-            breakpoints={{ lg: 1200, md: 996, sm: 768 }}
-            cols={{ lg: 12, md: 10, sm: 6 }}
-            rowHeight={70}
-            onLayoutChange={(currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
-              setCustomReportsLayouts(allLayouts);
-              try {
-                localStorage.setItem(CUSTOM_REPORTS_LAYOUT_KEY, JSON.stringify(allLayouts));
-              } catch (error) {
-                console.error("Error saving custom reports layout:", error);
-              }
-            }}
-            draggableHandle=".drag-handle"
-            isResizable={true}
-            isDraggable={true}
-            margin={[20, 20]}
-            containerPadding={[0, 0]}
-            compactType="vertical"
-          >
-            {customReports.map((report, index) => (
-              <div key={`custom-report-${index}`}>
-                <ReportWidget
-                  config={report}
-                  onEdit={onEditReport}
-                  onDuplicate={onDuplicateReport}
-                  onDelete={onDeleteReport}
-                  onExport={onExportReport}
-                />
-              </div>
-            ))}
-          </ResponsiveGridLayout>
+          {/* Horizontal Scrolling Container */}
+          <div className="overflow-x-auto pb-4">
+            <div className="flex gap-4 min-w-min">
+              {customReports.map((report, index) => (
+                <div
+                  key={`custom-report-${index}`}
+                  className="flex-shrink-0 w-80 cursor-pointer transition-transform hover:scale-105"
+                  onClick={() => onViewReport(report)}
+                >
+                  <ReportWidget
+                    config={report}
+                    onEdit={onEditReport}
+                    onDuplicate={onDuplicateReport}
+                    onDelete={onDeleteReport}
+                    onExport={onExportReport}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

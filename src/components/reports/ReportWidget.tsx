@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MoreVertical, Edit, Copy, Trash2, Maximize2, Download, GripVertical } from "lucide-react";
+import { MoreVertical, Edit, Copy, Trash2, Download, GripVertical } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,14 +44,12 @@ export default function ReportWidget({
   onDelete,
   onExport,
 }: ReportWidgetProps) {
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
   // Generate sample/mock data if none provided
   const chartData = (data && data.length > 0) ? data : (config.data || []);
   const hasData = chartData && chartData.length > 0;
 
   const renderChart = () => {
-    const height = isFullscreen ? 500 : 250;
+    const height = 200; // Compact height for horizontal cards
 
     if (!hasData) {
       return (
@@ -73,7 +71,7 @@ export default function ReportWidget({
                 cy="50%"
                 labelLine={false}
                 label={({ name, value }) => `${name}: ${value}`}
-                outerRadius={isFullscreen ? 180 : 80}
+                outerRadius={70}
                 fill="#8884d8"
                 dataKey="value"
               >
@@ -117,32 +115,6 @@ export default function ReportWidget({
     }
   };
 
-  const toggleFullscreen = () => {
-    setIsFullscreen(!isFullscreen);
-  };
-
-  if (isFullscreen) {
-    return (
-      <div className="fixed inset-0 bg-white z-50 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold">{config.title}</h2>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => onExport(config)}>
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
-            <Button variant="outline" size="sm" onClick={toggleFullscreen}>
-              Close Fullscreen
-            </Button>
-          </div>
-        </div>
-        <div className="h-[calc(100vh-120px)]">
-          {renderChart()}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <Card className="dashboard-grid-card hover:shadow-lg transition-shadow h-full flex flex-col overflow-hidden">
       <div className="drag-handle border-b cursor-move hover:bg-muted/50 transition-colors p-1 flex items-center justify-center bg-muted/10 h-4">
@@ -167,10 +139,6 @@ export default function ReportWidget({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={toggleFullscreen}>
-              <Maximize2 className="mr-2 h-4 w-4" />
-              Fullscreen
-            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onEdit(config)}>
               <Edit className="mr-2 h-4 w-4" />
               Edit Report

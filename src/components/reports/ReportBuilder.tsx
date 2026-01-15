@@ -84,7 +84,12 @@ export default function ReportBuilder({
   };
 
   const handleSave = () => {
-    onSave(config);
+    // Ensure data is included in the saved config
+    const configWithData = {
+      ...config,
+      data: data && data.length > 0 ? data : config.data || [],
+    };
+    onSave(configWithData);
     onClose();
   };
 
