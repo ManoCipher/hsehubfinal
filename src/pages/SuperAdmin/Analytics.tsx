@@ -107,6 +107,7 @@ export default function Analytics() {
   const [growthData, setGrowthData] = useState<GrowthData[]>([]);
   const [tierBreakdown, setTierBreakdown] = useState<any[]>([]);
   const [featureUsage, setFeatureUsage] = useState<any[]>([]);
+  const [selectedFeatureCompany, setSelectedFeatureCompany] = useState<string>("all");
 
 
   // Summary stats
@@ -319,17 +320,26 @@ export default function Analytics() {
     }
   };
 
-  const fetchFeatureUsage = async () => {
+  const fetchFeatureUsage = async (companyId: string = selectedFeatureCompany) => {
     try {
-      console.log('Fetching feature usage...');
+      console.log('Fetching feature usage for:', companyId);
+
+      const getQuery = (table: string) => {
+        let query = supabase.from(table).select("id", { count: "exact", head: true });
+        if (companyId !== "all") {
+          query = query.eq("company_id", companyId);
+        }
+        return query;
+      };
+
       // Count usage of different features across all companies
       const [employees, documents, courses, audits, incidents, riskAssessments] = await Promise.all([
-        supabase.from("employees").select("id", { count: "exact", head: true }),
-        supabase.from("documents").select("id", { count: "exact", head: true }),
-        supabase.from("courses").select("id", { count: "exact", head: true }),
-        supabase.from("audits").select("id", { count: "exact", head: true }),
-        supabase.from("incidents").select("id", { count: "exact", head: true }),
-        supabase.from("risk_assessments").select("id", { count: "exact", head: true }),
+        getQuery("employees"),
+        getQuery("documents"),
+        getQuery("courses"),
+        getQuery("audits"),
+        getQuery("incidents"),
+        getQuery("risk_assessments"),
       ]);
 
       console.log('Feature usage results:', {
@@ -340,13 +350,6 @@ export default function Analytics() {
         incidents: incidents.count,
         riskAssessments: riskAssessments.count,
       });
-
-      console.log('Employees error:', employees.error);
-      console.log('Documents error:', documents.error);
-      console.log('Courses error:', courses.error);
-      console.log('Audits error:', audits.error);
-      console.log('Incidents error:', incidents.error);
-      console.log('Risk Assessments error:', riskAssessments.error);
 
       setFeatureUsage([
         { name: "Employees", count: employees.count || 0 },
@@ -565,9 +568,30 @@ export default function Analytics() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Feature Usage */}
         <Card>
-          <CardHeader>
-            <CardTitle>Feature Usage</CardTitle>
-            <CardDescription>Total records created across all companies</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Feature Usage</CardTitle>
+              <CardDescription>Total records created across all companies</CardDescription>
+            </div>
+            <Select
+              value={selectedFeatureCompany}
+              onValueChange={(value) => {
+                setSelectedFeatureCompany(value);
+                fetchFeatureUsage(value);
+              }}
+            >
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="All Companies" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Companies</SelectItem>
+                {companyUsage.map((company) => (
+                  <SelectItem key={company.id} value={company.id}>
+                    {company.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </CardHeader>
           <CardContent>
             <div className="h-80">

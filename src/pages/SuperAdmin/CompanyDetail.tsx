@@ -107,6 +107,15 @@ interface CompanyAddon {
     billing_cycle: string;
 }
 
+interface Invoice {
+    id: string;
+    invoice_number: string;
+    total: number;
+    status: string;
+    created_at: string;
+    currency: string;
+}
+
 export default function CompanyDetail() {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -142,7 +151,12 @@ export default function CompanyDetail() {
         billing_cycle: "monthly",
         quantity: 1,
         auto_renew: true,
+        is_free: false,
     });
+
+    // Invoices state
+    const [invoices, setInvoices] = useState<Invoice[]>([]);
+    const [selectedInvoiceForCorrection, setSelectedInvoiceForCorrection] = useState<Invoice | null>(null);
 
 
 
@@ -167,7 +181,9 @@ export default function CompanyDetail() {
                 fetchSubscriptionHistory(),
                 fetchAddons(),
                 fetchAuditLogs(),
+                fetchAuditLogs(),
                 fetchAvailableAddons(),
+                fetchInvoices(),
             ]);
         } catch (error: any) {
             toast({
@@ -283,6 +299,7 @@ export default function CompanyDetail() {
             .from("audit_logs")
             .select("*")
             .eq("company_id", id)
+            .neq("actor_role", "super_admin") // Filter out super admin actions for company activity view
             .order("created_at", { ascending: false })
             .limit(20);
 
@@ -309,6 +326,22 @@ export default function CompanyDetail() {
         setAvailableAddons(data || []);
     };
 
+    const fetchInvoices = async () => {
+        // Mock data if table doesn't exist or is empty, but try fetch first
+        const { data, error } = await supabase
+            .from("invoices")
+            .select("*")
+            .eq("company_id", id)
+            .order("created_at", { ascending: false });
+
+        if (error) {
+            console.log("Error fetching invoices (might not exist yet):", error);
+            setInvoices([]);
+            return;
+        }
+        setInvoices(data || []);
+    };
+
     const handleAssignAddon = async () => {
         if (!assignForm.addon_id) {
             toast({
@@ -321,11 +354,15 @@ export default function CompanyDetail() {
 
         try {
             const selectedAddon = availableAddons.find(a => a.id === assignForm.addon_id);
-            const price = assignForm.billing_cycle === "yearly"
-                ? selectedAddon?.price_yearly
-                : selectedAddon?.billing_type === "one_time"
-                    ? selectedAddon?.price_one_time
-                    : selectedAddon?.price_monthly;
+
+            // Calculate price: 0 if free, otherwise based on billing cycle
+            const price = assignForm.is_free
+                ? 0
+                : assignForm.billing_cycle === "yearly"
+                    ? selectedAddon?.price_yearly
+                    : selectedAddon?.billing_type === "one_time"
+                        ? selectedAddon?.price_one_time
+                        : selectedAddon?.price_monthly;
 
             const { error } = await supabase
                 .from("company_addons")
@@ -338,13 +375,28 @@ export default function CompanyDetail() {
                     auto_renew: assignForm.auto_renew,
                     status: "active",
                     start_date: new Date().toISOString(),
+                    config: { is_free: assignForm.is_free },
                 });
 
             if (error) throw error;
 
-            toast({ title: "Success", description: "Add-on assigned to company" });
+            // Log the assignment with audit trail
+            await supabase.rpc("create_audit_log", {
+                p_action_type: "assign_addon",
+                p_target_type: "addon",
+                p_target_id: assignForm.addon_id,
+                p_target_name: selectedAddon?.name || "",
+                p_details: {
+                    is_free: assignForm.is_free,
+                    price: price,
+                    billing_cycle: assignForm.billing_cycle,
+                },
+                p_company_id: id,
+            });
+
+            toast({ title: "Success", description: assignForm.is_free ? "Free add-on assigned to company" : "Add-on assigned to company" });
             setIsAssignDialogOpen(false);
-            setAssignForm({ addon_id: "", billing_cycle: "monthly", quantity: 1, auto_renew: true });
+            setAssignForm({ addon_id: "", billing_cycle: "monthly", quantity: 1, auto_renew: true, is_free: false });
             fetchAddons(); // Refresh the list
         } catch (error: any) {
             toast({
@@ -609,6 +661,9 @@ export default function CompanyDetail() {
                     reason: correctionReason,
                     amount: amount,
                     corrected_by: user?.email,
+                    invoice_id: selectedInvoiceForCorrection?.id,
+                    invoice_number: selectedInvoiceForCorrection?.invoice_number,
+                    original_total: selectedInvoiceForCorrection?.total
                 },
                 p_company_id: id,
             });
@@ -621,6 +676,7 @@ export default function CompanyDetail() {
             setInvoiceCorrectionDialogOpen(false);
             setCorrectionReason("");
             setCorrectionAmount("");
+            setSelectedInvoiceForCorrection(null);
             fetchAuditLogs(); // Refresh audit logs
         } catch (error: any) {
             toast({
@@ -958,6 +1014,61 @@ export default function CompanyDetail() {
 
                 {/* Billing Tab */}
                 <TabsContent value="billing" className="space-y-4">
+                    {/* Invoices Section - NEW */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Invoices</CardTitle>
+                            <CardDescription>View and manage company invoices</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {invoices.length === 0 ? (
+                                <p className="text-center py-8 text-muted-foreground">
+                                    No invoices found
+                                </p>
+                            ) : (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Invoice #</TableHead>
+                                            <TableHead>Date</TableHead>
+                                            <TableHead>Total</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead className="text-right">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {invoices.map((inv) => (
+                                            <TableRow key={inv.id}>
+                                                <TableCell className="font-medium">{inv.invoice_number}</TableCell>
+                                                <TableCell>{new Date(inv.created_at).toLocaleDateString()}</TableCell>
+                                                <TableCell>€{inv.total}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant={inv.status === 'paid' ? 'default' : 'secondary'}>
+                                                        {inv.status}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => {
+                                                            setSelectedInvoiceForCorrection(inv);
+                                                            setCorrectionAmount(inv.total.toString());
+                                                            setInvoiceCorrectionDialogOpen(true);
+                                                        }}
+                                                    >
+                                                        <FileEdit className="w-4 h-4 mr-2" />
+                                                        Correct
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            )}
+                        </CardContent>
+                    </Card>
+
                     <Card>
                         <CardHeader>
                             <CardTitle>Subscription History</CardTitle>
@@ -1023,7 +1134,7 @@ export default function CompanyDetail() {
                                     variant="outline"
                                 >
                                     <FileEdit className="w-4 h-4 mr-2" />
-                                    New Correction
+                                    General Adjustment
                                 </Button>
                             </div>
                         </CardHeader>
@@ -1428,6 +1539,17 @@ export default function CompanyDetail() {
                             />
                             <Label>Auto-renew subscription</Label>
                         </div>
+
+                        <div className="flex items-center space-x-2 p-3 bg-green-50 dark:bg-green-950 rounded-md border border-green-200 dark:border-green-800">
+                            <Switch
+                                checked={assignForm.is_free}
+                                onCheckedChange={(checked) => setAssignForm({ ...assignForm, is_free: checked })}
+                            />
+                            <div>
+                                <Label className="text-green-700 dark:text-green-300">Assign as free add-on</Label>
+                                <p className="text-xs text-green-600 dark:text-green-400">No billing will be applied for this add-on</p>
+                            </div>
+                        </div>
                     </div>
 
                     <DialogFooter>
@@ -1435,7 +1557,7 @@ export default function CompanyDetail() {
                             variant="outline"
                             onClick={() => {
                                 setIsAssignDialogOpen(false);
-                                setAssignForm({ addon_id: "", billing_cycle: "monthly", quantity: 1, auto_renew: true });
+                                setAssignForm({ addon_id: "", billing_cycle: "monthly", quantity: 1, auto_renew: true, is_free: false });
                             }}
                         >
                             Cancel

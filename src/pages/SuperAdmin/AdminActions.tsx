@@ -161,7 +161,7 @@ export default function AdminActions() {
         const { data } = await supabase
             .from("audit_logs")
             .select("*")
-            .eq("actor_email", user?.email)
+            // .eq("actor_email", user?.email) // Removed to show ALL admin actions
             .order("created_at", { ascending: false })
             .limit(10);
         if (data) setRecentActions(data);
@@ -720,20 +720,65 @@ export default function AdminActions() {
                             {recentActions.map((action) => (
                                 <div key={action.id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
                                     <div className="flex-1">
-                                        <div className="flex items-center gap-2">
-                                            <Badge variant="outline">{action.action_type?.replace(/_/g, ' ')}</Badge>
-                                            <span className="text-sm font-medium">{action.target_name}</span>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <Badge variant="outline" className="capitalize">
+                                                {action.action_type?.replace(/_/g, ' ')}
+                                            </Badge>
+                                            <span className="text-sm font-medium">
+                                                {action.target_type === 'addon' ? action.target_name : ''}
+                                            </span>
                                         </div>
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            {action.target_type} • {new Date(action.created_at).toLocaleString()}
-                                        </p>
+
+                                        <div className="text-sm grid grid-cols-1 gap-1">
+                                            <div className="flex items-center gap-2 text-muted-foreground">
+                                                <Building2 className="h-3 w-3" />
+                                                <span className="font-medium text-foreground">
+                                                    {action.action_type === 'login'
+                                                        ? (() => {
+                                                            const actor = users.find(u => u.email === action.actor_email);
+                                                            if (actor) {
+                                                                const company = companies.find(c => c.id === actor.company_id);
+                                                                return company ? `${actor.full_name} (${company.name})` : actor.full_name;
+                                                            }
+                                                            return action.actor_email;
+                                                        })()
+                                                        : (['company', 'invoice', 'subscription'].includes(action.target_type)
+                                                            ? action.target_name
+                                                            : (companies.find(c => c.id === action.company_id)?.name || action.details?.company || 'N/A'))
+                                                    }
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-muted-foreground text-xs">
+                                                <UserCog className="h-3 w-3" />
+                                                <span>By: {action.actor_email || 'System'}</span>
+                                                <span>•</span>
+                                                <span>{new Date(action.created_at).toLocaleString()}</span>
+                                            </div>
+                                        </div>
+
                                         {action.details && (
-                                            <p className="text-xs text-muted-foreground mt-1">
-                                                {JSON.stringify(action.details).substring(0, 100)}
-                                            </p>
+                                            <div className="text-xs text-muted-foreground mt-2 grid grid-cols-2 gap-x-4 gap-y-1 bg-background/50 p-2 rounded border">
+                                                {action.details.reason && (
+                                                    <span>Reason: <span className="font-medium text-foreground">{action.details.reason}</span></span>
+                                                )}
+                                                {action.details.invoice_number && (
+                                                    <span>Invoice: <span className="font-medium text-foreground">{action.details.invoice_number}</span></span>
+                                                )}
+                                                {action.details.amount && (
+                                                    <span>Amount: <span className="font-medium text-foreground">€{action.details.amount}</span></span>
+                                                )}
+                                                {action.details.new_blocked_status !== undefined && (
+                                                    <span>Status: <span className="font-medium text-foreground">{action.details.new_blocked_status ? 'Blocked' : 'Unblocked'}</span></span>
+                                                )}
+                                                {action.details.days_extended && (
+                                                    <span>Extended: <span className="font-medium text-foreground">+{action.details.days_extended} days</span></span>
+                                                )}
+                                                {action.details.message && (
+                                                    <span className="col-span-2">Message: <span className="font-medium text-foreground">{action.details.message}</span></span>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
-                                    <CheckCircle className="h-5 w-5 text-green-500" />
                                 </div>
                             ))}
                         </div>

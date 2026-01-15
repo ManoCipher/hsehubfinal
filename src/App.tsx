@@ -45,6 +45,7 @@ import SuperAdminSupport from "./pages/SuperAdmin/Support";
 import AuthDebug from "./pages/AuthDebug";
 import NotFound from "./pages/NotFound";
 import PublicNotes from "./pages/PublicNotes";
+import Notifications from "./pages/Notifications";
 import AcceptInvitation from "./pages/AcceptInvitation";
 import MainLayout from "./components/MainLayout";
 import SuperAdminRoute from "./components/SuperAdminRoute";
@@ -404,6 +405,16 @@ const App = () => (
                   <MainLayout>
                     <ProtectedRoute requiredPermission="dashboard">
                       <Invoices />
+                    </ProtectedRoute>
+                  </MainLayout>
+                }
+              />
+              <Route
+                path="/notifications"
+                element={
+                  <MainLayout>
+                    <ProtectedRoute requiredPermission="dashboard">
+                      <Notifications />
                     </ProtectedRoute>
                   </MainLayout>
                 }

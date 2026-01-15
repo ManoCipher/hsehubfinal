@@ -36,7 +36,16 @@ import {
     UserCheck,
     UserX,
     Eye,
+    Trash2,
 } from "lucide-react";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 
 interface GlobalUser {
     user_id: string;
@@ -65,6 +74,11 @@ export default function GlobalUsers() {
         blockedUsers: 0,
         failedLogins: 0,
     });
+
+    // Delete user state
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [userToDelete, setUserToDelete] = useState<GlobalUser | null>(null);
+    const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
         if (!loading && (!user || userRole !== "super_admin")) {
@@ -192,6 +206,55 @@ export default function GlobalUsers() {
 
         return matchesSearch && matchesRole;
     });
+
+    const handleDeleteUser = async () => {
+        if (!userToDelete) return;
+
+        setDeleting(true);
+        try {
+            // Soft delete: Remove user role (revokes access)
+            const { error: roleError } = await supabase
+                .from("user_roles")
+                .delete()
+                .eq("user_id", userToDelete.user_id)
+                .eq("company_id", userToDelete.company_id);
+
+            if (roleError) throw roleError;
+
+            // Log the deletion in audit logs
+            await supabase.from("audit_logs").insert({
+                actor_email: user?.email,
+                actor_role: "super_admin",
+                action_type: "delete_user",
+                target_type: "user",
+                target_name: userToDelete.email,
+                details: {
+                    user_name: userToDelete.full_name,
+                    company_name: userToDelete.company_name,
+                    deleted_by: "super_admin",
+                },
+                company_id: userToDelete.company_id,
+            });
+
+            toast({
+                title: "User Deleted",
+                description: `${userToDelete.full_name} has been removed from ${userToDelete.company_name}`,
+            });
+
+            setDeleteDialogOpen(false);
+            setUserToDelete(null);
+            fetchUsers();
+            fetchStats();
+        } catch (error: any) {
+            toast({
+                title: "Error",
+                description: error.message,
+                variant: "destructive",
+            });
+        } finally {
+            setDeleting(false);
+        }
+    };
 
     if (loading || loadingData) {
         return (
@@ -377,11 +440,25 @@ export default function GlobalUsers() {
                                                 {new Date(user.created_at).toLocaleDateString()}
                                             </TableCell>
                                             <TableCell className="text-right">
-                                                <Link to={`/super-admin/companies/${user.company_id}`}>
-                                                    <Button variant="ghost" size="icon">
-                                                        <Eye className="w-4 h-4" />
+                                                <div className="flex items-center justify-end gap-1">
+                                                    <Link to={`/super-admin/companies/${user.company_id}`}>
+                                                        <Button variant="ghost" size="icon" title="View Company">
+                                                            <Eye className="w-4 h-4" />
+                                                        </Button>
+                                                    </Link>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="text-destructive hover:text-destructive"
+                                                        title="Delete User"
+                                                        onClick={() => {
+                                                            setUserToDelete(user);
+                                                            setDeleteDialogOpen(true);
+                                                        }}
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
                                                     </Button>
-                                                </Link>
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))
@@ -391,6 +468,44 @@ export default function GlobalUsers() {
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Delete User Confirmation Dialog */}
+            <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete User</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to delete this user? This will revoke their access to the company.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {userToDelete && (
+                        <div className="py-4 space-y-2">
+                            <p><strong>Name:</strong> {userToDelete.full_name}</p>
+                            <p><strong>Email:</strong> {userToDelete.email}</p>
+                            <p><strong>Company:</strong> {userToDelete.company_name}</p>
+                            <p><strong>Role:</strong> {userToDelete.role}</p>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                setDeleteDialogOpen(false);
+                                setUserToDelete(null);
+                            }}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={handleDeleteUser}
+                            disabled={deleting}
+                        >
+                            {deleting ? "Deleting..." : "Delete User"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
