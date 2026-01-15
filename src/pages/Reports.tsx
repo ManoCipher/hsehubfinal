@@ -488,9 +488,38 @@ export default function Reports() {
 
       switch (metric) {
         case "incidents":
-          // Special handling for incidents - use incident_date instead of created_at
+          // Special handling for incidents - support location via employee join
           {
-            // Determine which column to group by
+            // Handle location grouping - need to join with employees
+            if (groupBy === "location" || groupBy === "department") {
+              const { data, error } = await supabase
+                .from("incidents")
+                .select(`
+                  id,
+                  reported_by,
+                  employees!incidents_reported_by_fkey (
+                    location,
+                    department
+                  )
+                `)
+                .eq("company_id", companyId);
+
+              if (error) {
+                console.error("Error fetching incidents with location:", error);
+                return [];
+              }
+
+              // Group by location or department from employee
+              const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+                const key = item.employees?.[groupBy] || "Unknown";
+                acc[key] = (acc[key] || 0) + 1;
+                return acc;
+              }, {});
+
+              return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+            }
+
+            // Standard incident grouping (status, type, severity)
             let incidentGroupCol = "investigation_status";
             if (groupBy === "category" || groupBy === "incident_type") {
               incidentGroupCol = "incident_type";
@@ -532,6 +561,7 @@ export default function Reports() {
           // Courses are catalog items, don't filter by date
           // Query all courses and group by name (each course is 1 item)
           {
+            console.log("Fetching trainings/courses for company:", companyId);
             const { data, error } = await supabase
               .from("courses")
               .select("id, name")
@@ -541,6 +571,7 @@ export default function Reports() {
               console.error("Error fetching courses data:", error);
               return [];
             }
+            console.log("Fetched courses:", data);
 
             // Return each course as a data point
             return (data || []).map(course => ({
@@ -660,7 +691,7 @@ export default function Reports() {
 
       setSelectedReport({
         ...template,
-        id: Date.now().toString(),
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
         data, // Include actual fetched data
       } as ReportConfig);
       setIsLibraryOpen(false);
@@ -710,10 +741,11 @@ export default function Reports() {
   const handleDuplicateReport = (config: ReportConfig) => {
     const duplicate = {
       ...config,
-      id: Date.now().toString(),
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
       title: `${config.title} (Copy)`,
     };
     const updatedReports = [...customReports, duplicate];
+    setCustomReports(updatedReports); // Update state for immediate UI refresh
     saveCustomReports(updatedReports);
     toast({
       title: "Report Duplicated",
@@ -887,6 +919,10 @@ export default function Reports() {
         onSave={handleSaveReport}
         initialConfig={selectedReport}
         data={selectedReport?.data || []}
+        onRefreshData={async (config) => {
+          // Re-fetch data based on new config
+          return await fetchTemplateData(config);
+        }}
       />
 
       <ReportLibrary

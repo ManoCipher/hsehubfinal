@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, BarChart3, PieChart, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -51,6 +51,7 @@ interface ReportBuilderProps {
   onSave: (config: ReportConfig) => void;
   initialConfig?: ReportConfig | null;
   data?: any[];
+  onRefreshData?: (config: Partial<ReportConfig>) => Promise<any[]>;
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82ca9d'];
@@ -61,6 +62,7 @@ export default function ReportBuilder({
   onSave,
   initialConfig,
   data = [],
+  onRefreshData,
 }: ReportBuilderProps) {
   const [config, setConfig] = useState<ReportConfig>(
     initialConfig || {
@@ -77,32 +79,73 @@ export default function ReportBuilder({
     }
   );
 
+  // Local chart data state that can be refreshed
+  const [chartData, setChartData] = useState<any[]>(data);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Sync config when initialConfig changes (e.g., when editing different reports)
+  useEffect(() => {
+    if (initialConfig) {
+      setConfig(initialConfig);
+      // Also update chart data from initial config
+      setChartData(initialConfig.data || data || []);
+    }
+  }, [initialConfig]);
+
+  // Sync chart data when data prop changes
+  useEffect(() => {
+    if (data && data.length > 0) {
+      setChartData(data);
+    }
+  }, [data]);
+
+  // Refresh data when metric or groupBy changes
+  const handleConfigChange = async (key: string, value: any) => {
+    const newConfig = { ...config, [key]: value };
+    setConfig(newConfig);
+
+    // If metric or groupBy changed and we have a refresh callback, fetch new data
+    if ((key === 'metric' || key === 'groupBy') && onRefreshData) {
+      setIsLoading(true);
+      try {
+        const newData = await onRefreshData(newConfig);
+        setChartData(newData || []);
+      } catch (error) {
+        console.error("Error refreshing data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
   if (!isOpen) return null;
 
   const updateConfig = (key: string, value: any) => {
-    setConfig((prev) => ({ ...prev, [key]: value }));
+    handleConfigChange(key, value);
   };
 
   const handleSave = () => {
     // Ensure data is included in the saved config
     const configWithData = {
       ...config,
-      data: data && data.length > 0 ? data : config.data || [],
+      data: chartData && chartData.length > 0 ? chartData : config.data || [],
     };
     onSave(configWithData);
     onClose();
   };
 
-  // Generate sample/mock data based on config
-  const getChartData = () => {
-    if (data && data.length > 0) return data;
-    return [];
-  };
-
-  const chartData = getChartData();
   const hasData = chartData.length > 0;
 
   const renderChart = () => {
+    if (isLoading) {
+      return (
+        <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground border-2 border-dashed rounded-lg">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-2"></div>
+          <p>Loading data...</p>
+        </div>
+      );
+    }
+
     if (!hasData) {
       return (
         <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground border-2 border-dashed rounded-lg">
