@@ -1068,6 +1068,158 @@ export default function EmployeeProfile() {
     }
   };
 
+  const handleLikeNote = async (noteId: string) => {
+    if (!employee?.notes || !user?.id) return;
+
+    try {
+      // Parse existing notes
+      let existingNotes: any[] = [];
+      try {
+        if (
+          employee.notes.startsWith("[") ||
+          employee.notes.startsWith("{")
+        ) {
+          existingNotes = JSON.parse(employee.notes);
+          if (!Array.isArray(existingNotes)) existingNotes = [];
+        }
+      } catch (e) {
+        console.error("Error parsing notes:", e);
+        return;
+      }
+
+      // Find the note and toggle like
+      const updatedNotes = existingNotes.map((note) => {
+        if (note.id === noteId) {
+          const likes = note.likes || [];
+          const userIndex = likes.indexOf(user.id);
+
+          if (userIndex > -1) {
+            // Unlike: remove user from likes
+            likes.splice(userIndex, 1);
+          } else {
+            // Like: add user to likes
+            likes.push(user.id);
+          }
+
+          return { ...note, likes };
+        }
+        return note;
+      });
+
+      const updatedNotesString = JSON.stringify(updatedNotes);
+
+      // Update in database
+      const { error } = await (supabase as any)
+        .from("employees")
+        .update({ notes: updatedNotesString })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      // Refresh employee data to update UI
+      fetchEmployeeData();
+    } catch (error) {
+      console.error("Error liking note:", error);
+      toast.error("Failed to update like");
+    }
+  };
+
+  const handleSaveReply = async (noteId: string) => {
+    if (!replyText.trim() || !employee?.notes || !user?.id) return;
+
+    try {
+      // Parse existing notes
+      let existingNotes: any[] = [];
+      try {
+        if (
+          employee.notes.startsWith("[") ||
+          employee.notes.startsWith("{")
+        ) {
+          existingNotes = JSON.parse(employee.notes);
+          if (!Array.isArray(existingNotes)) existingNotes = [];
+        }
+      } catch (e) {
+        console.error("Error parsing notes:", e);
+        return;
+      }
+
+      // Get author name from user profile
+      let authorName = "Anonymous";
+      if (userProfile) {
+        if (userProfile.first_name && userProfile.last_name) {
+          authorName = `${userProfile.first_name} ${userProfile.last_name}`;
+        } else if (userProfile.full_name) {
+          authorName = userProfile.full_name;
+        } else if (userProfile.email) {
+          authorName = userProfile.email;
+        }
+      }
+
+      // Create reply object
+      const newReply = {
+        id: Date.now().toString(),
+        content: replyText,
+        author: authorName,
+        author_id: user.id,
+        date: new Date().toISOString(),
+      };
+
+      // Find the note and add reply
+      const updatedNotes = existingNotes.map((note) => {
+        if (note.id === noteId) {
+          const replies = note.replies || [];
+          replies.push(newReply);
+          return { ...note, replies };
+        }
+        return note;
+      });
+
+      const updatedNotesString = JSON.stringify(updatedNotes);
+
+      // Update in database
+      const { error } = await (supabase as any)
+        .from("employees")
+        .update({ notes: updatedNotesString })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      await logActivity(
+        "Added reply to note",
+        "create",
+        replyText.substring(0, 100) + (replyText.length > 100 ? "..." : "")
+      );
+
+      toast.success("Reply added successfully");
+      setReplyingToNoteId(null);
+      setReplyText("");
+      fetchEmployeeData();
+
+      // Send notification to the note author
+      try {
+        const originalNote = existingNotes.find((n) => n.id === noteId);
+        if (originalNote && originalNote.author_id && originalNote.author_id !== user.id) {
+          // Find the author in team members
+          const noteAuthor = teamMembers.find((m) => m.id === originalNote.author_id);
+          if (noteAuthor?.email) {
+            await sendNoteNotification(
+              noteAuthor.email,
+              `${noteAuthor.first_name} ${noteAuthor.last_name}`,
+              `${authorName} replied: ${replyText}`,
+              authorName
+            );
+          }
+        }
+      } catch (notifError) {
+        console.error("Error sending reply notification:", notifError);
+        // Don't fail the whole operation if notification fails
+      }
+    } catch (error) {
+      console.error("Error saving reply:", error);
+      toast.error("Failed to save reply");
+    }
+  };
+
   const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     const cursorPos = e.target.selectionStart;
@@ -3148,10 +3300,14 @@ export default function EmployeeProfile() {
                                         <Button
                                           variant="ghost"
                                           size="sm"
-                                          className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                          className={`h-6 px-2 text-xs ${note.likes?.includes(user?.id)
+                                            ? "text-primary bg-primary/10"
+                                            : "text-muted-foreground hover:text-foreground"
+                                            }`}
+                                          onClick={() => handleLikeNote(note.id)}
                                         >
-                                          <ThumbsUp className="w-3 h-3 mr-1" />
-                                          Like
+                                          <ThumbsUp className={`w-3 h-3 mr-1 ${note.likes?.includes(user?.id) ? "fill-current" : ""}`} />
+                                          Like{note.likes?.length > 0 ? ` (${note.likes.length})` : ""}
                                         </Button>
 
                                         <Button
@@ -3206,13 +3362,38 @@ export default function EmployeeProfile() {
                                                     }
                                                   );
 
-                                                  if (mentionedMember?.email) {
-                                                    await sendNoteNotification(
-                                                      mentionedMember.email,
-                                                      `${mentionedMember.first_name} ${mentionedMember.last_name}`,
-                                                      note.content,
-                                                      currentUserName
-                                                    );
+                                                  if (mentionedMember) {
+                                                    // Send email notification
+                                                    if (mentionedMember.email) {
+                                                      await sendNoteNotification(
+                                                        mentionedMember.email,
+                                                        `${mentionedMember.first_name} ${mentionedMember.last_name}`,
+                                                        note.content,
+                                                        currentUserName
+                                                      );
+                                                    }
+
+                                                    // Create in-app notification
+                                                    // Use user_id field from team_member, not the team_member id
+                                                    if (mentionedMember.user_id) {
+                                                      const { error: notifError } = await supabase.from("notifications").insert({
+                                                        user_id: mentionedMember.user_id,
+                                                        company_id: companyId,
+                                                        title: "You were mentioned in a note",
+                                                        message: `${currentUserName} mentioned you: ${note.content.substring(0, 100)}${note.content.length > 100 ? '...' : ''}`,
+                                                        type: "info",
+                                                        category: "system", // Must be valid: task, training, audit, incident, measure, risk, system
+                                                        is_read: false,
+                                                        related_id: employee?.id,
+                                                      });
+
+                                                      if (notifError) {
+                                                        console.error("Failed to create notification:", notifError);
+                                                      } else {
+                                                        console.log("In-app notification created for:", mentionedMember.first_name);
+                                                      }
+                                                    }
+
                                                     successCount++;
                                                   } else {
                                                     console.log(`No team member found for: "${mentionedName}"`);
@@ -3253,6 +3434,37 @@ export default function EmployeeProfile() {
                                         </Button>
                                       </div>
 
+                                      {/* Display existing replies */}
+                                      {note.replies && note.replies.length > 0 && (
+                                        <div className="mt-3 pl-4 border-l-2 border-muted space-y-2">
+                                          {note.replies.map((reply: any) => (
+                                            <div key={reply.id} className="flex gap-2 p-2 rounded bg-muted/30">
+                                              <div className="w-7 h-7 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center flex-shrink-0 text-xs font-semibold">
+                                                {reply.author?.[0]?.toUpperCase() || "U"}
+                                              </div>
+                                              <div className="flex-1">
+                                                <div className="flex items-center gap-2">
+                                                  <p className="font-medium text-xs">{reply.author}</p>
+                                                  <span className="text-xs text-muted-foreground">
+                                                    {reply.date
+                                                      ? new Date(reply.date).toLocaleString("en-US", {
+                                                        month: "short",
+                                                        day: "numeric",
+                                                        hour: "2-digit",
+                                                        minute: "2-digit",
+                                                      })
+                                                      : ""}
+                                                  </span>
+                                                </div>
+                                                <p className="text-xs text-foreground mt-1 whitespace-pre-wrap">
+                                                  {renderNoteContent(reply.content)}
+                                                </p>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+
                                       {/* Reply Input - shown below the note when replying */}
                                       {replyingToNoteId === note.id && (
                                         <div className="mt-3 pl-4 border-l-2 border-primary/20">
@@ -3280,12 +3492,7 @@ export default function EmployeeProfile() {
                                               <Button
                                                 size="sm"
                                                 className="text-xs h-7"
-                                                onClick={() => {
-                                                  // TODO: Implement reply save functionality
-                                                  toast.success("Reply added");
-                                                  setReplyingToNoteId(null);
-                                                  setReplyText("");
-                                                }}
+                                                onClick={() => handleSaveReply(note.id)}
                                               >
                                                 Save
                                               </Button>

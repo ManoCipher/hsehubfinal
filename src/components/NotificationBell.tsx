@@ -74,7 +74,7 @@ export default function NotificationBell() {
           const newNotif = payload.new as Notification;
           setNotifications((prev) => [newNotif, ...prev]);
           setUnreadCount((prev) => prev + 1);
-          
+
           // Show toast for important notifications
           if (newNotif.type === "warning" || newNotif.type === "error") {
             toast({
@@ -122,7 +122,7 @@ export default function NotificationBell() {
 
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       setUnreadCount(0);
-      
+
       toast({
         title: "✅ All notifications marked as read",
       });
@@ -140,6 +140,7 @@ export default function NotificationBell() {
       risk: "🎯",
       measure: "✅",
       message: "💬",
+      system: "🔔",
     };
     return icons[category] || "📢";
   };
@@ -231,9 +232,8 @@ export default function NotificationBell() {
                 <button
                   key={notification.id}
                   onClick={() => handleNotificationClick(notification)}
-                  className={`w-full text-left p-3 rounded-lg transition-colors hover:bg-muted mb-1 ${
-                    !notification.is_read ? "bg-muted/50" : ""
-                  }`}
+                  className={`w-full text-left p-3 rounded-lg transition-colors hover:bg-muted mb-1 ${!notification.is_read ? "bg-muted/50" : ""
+                    }`}
                 >
                   <div className="flex gap-3">
                     <div className="flex-shrink-0">
