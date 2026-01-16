@@ -49,7 +49,7 @@ export default function ReportWidget({
   const hasData = chartData && chartData.length > 0;
 
   const renderChart = () => {
-    const height = 200; // Compact height for horizontal cards
+    const height = "100%";
 
     if (!hasData) {
       return (
@@ -71,7 +71,7 @@ export default function ReportWidget({
                 cy="50%"
                 labelLine={false}
                 label={({ name, value }) => `${name}: ${value}`}
-                outerRadius={70}
+                outerRadius={80} // Increased radius slightly
                 fill="#8884d8"
                 dataKey="value"
               >
@@ -80,7 +80,7 @@ export default function ReportWidget({
                 ))}
               </Pie>
               <Tooltip />
-              <Legend />
+              <Legend verticalAlign="bottom" height={36} />
             </RechartsPie>
           </ResponsiveContainer>
         );
@@ -88,13 +88,24 @@ export default function ReportWidget({
       case 'bar':
         return (
           <ResponsiveContainer width="100%" height={height}>
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="value" fill="#0088FE" />
+            <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                interval={0}
+                height={40}
+              />
+              <YAxis
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip cursor={{ fill: 'transparent' }} />
+              <Legend verticalAlign="top" align="right" height={36} iconType="circle" />
+              <Bar dataKey="value" fill="#0088FE" radius={[4, 4, 0, 0]} barSize={40} />
             </BarChart>
           </ResponsiveContainer>
         );
@@ -102,13 +113,23 @@ export default function ReportWidget({
       case 'line':
         return (
           <ResponsiveContainer width="100%" height={height}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
+            <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                height={40}
+              />
+              <YAxis
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+              />
               <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="value" stroke="#8884d8" strokeWidth={2} />
+              <Legend verticalAlign="top" align="right" height={36} iconType="circle" />
+              <Line type="monotone" dataKey="value" stroke="#8884d8" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
             </LineChart>
           </ResponsiveContainer>
         );
@@ -162,11 +183,11 @@ export default function ReportWidget({
         </DropdownMenu>
       </CardHeader>
 
-      <CardContent className="flex-1 p-2 min-h-0 flex flex-col">
-        <div className="flex-1 min-h-[120px]">
+      <CardContent className="flex-1 p-2 pb-3 min-h-[150px] flex flex-col">
+        <div className="flex-1 w-full min-h-0">
           {renderChart()}
         </div>
-        <div className="mt-1 text-[10px] text-muted-foreground text-center border-t pt-1">
+        <div className="mt-2 text-[10px] text-muted-foreground text-center border-t pt-2">
           Total: {chartData.reduce((sum, d) => sum + d.value, 0)}
         </div>
       </CardContent>

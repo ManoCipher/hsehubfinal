@@ -295,10 +295,10 @@ export default function RiskAssessments() {
           .eq("company_id", companyId)
           .order("name"),
         supabase
-          .from("team_members")
-          .select("id, first_name, last_name, email, role")
+          .from("employees")
+          .select("*")
           .eq("company_id", companyId)
-          .order("first_name"),
+          .order("full_name"),
       ]);
 
       if (risksRes.error) throw risksRes.error;
@@ -326,11 +326,11 @@ export default function RiskAssessments() {
       setLocations(locationsRes.data || []);
       setDepartments(departmentsRes.data || []);
       setExposureGroups(exposureGroupsRes.data || []);
-      
-      // Map team members to Employee format: show name and email
-      setEmployees((employeesRes.data || []).map((tm: any) => ({
-        id: tm.id,
-        full_name: `${tm.first_name} ${tm.last_name} (${tm.email})`,
+
+      // Map employees to correct format
+      setEmployees((employeesRes.data || []).map((emp: any) => ({
+        id: emp.id,
+        full_name: `${emp.full_name} ${emp.email ? `(${emp.email})` : ''}`,
       })));
     } catch (err: unknown) {
       const e = err as { message?: string } | Error | null;
@@ -411,7 +411,7 @@ export default function RiskAssessments() {
       // Insert measures
       const validMeasures = measures.filter((m) => m.measure_building_block);
       console.log("Valid measures to insert:", validMeasures);
-      
+
       if (created && validMeasures.length > 0) {
         const measuresData = validMeasures.map((m) => ({
           risk_assessment_id: created.id,
@@ -497,11 +497,11 @@ export default function RiskAssessments() {
   // Calculate progress based on measure statuses
   const calculateProgress = (measures: Measure[]) => {
     if (!measures || measures.length === 0) return 0;
-    
+
     const completedCount = measures.filter(
       (m) => m.progress_status === "completed" || m.progress_status === "done"
     ).length;
-    
+
     return Math.round((completedCount / measures.length) * 100);
   };
 
@@ -1730,7 +1730,7 @@ export default function RiskAssessments() {
                     try {
                       // Find the dialog content element
                       const dialogElement = document.querySelector('[role="dialog"]') as HTMLElement;
-                      
+
                       if (!dialogElement) {
                         throw new Error("Dialog not found");
                       }
@@ -1739,7 +1739,7 @@ export default function RiskAssessments() {
                       const originalOverflow = dialogElement.style.overflow;
                       const originalMaxHeight = dialogElement.style.maxHeight;
                       const originalMaxWidth = dialogElement.style.maxWidth;
-                      
+
                       // Temporarily remove overflow restrictions
                       dialogElement.style.overflow = 'visible';
                       dialogElement.style.maxHeight = 'none';
@@ -1892,7 +1892,7 @@ export default function RiskAssessments() {
                                   const isSelected =
                                     prob === selectedRisk.probability_before &&
                                     damage ===
-                                      selectedRisk.extent_damage_before;
+                                    selectedRisk.extent_damage_before;
 
                                   let bgColor = "bg-green-500";
                                   if (score >= 20) bgColor = "bg-red-500";
@@ -1904,11 +1904,10 @@ export default function RiskAssessments() {
                                   return (
                                     <div
                                       key={`${prob}-${damage}`}
-                                      className={`h-14 flex items-center justify-center text-lg font-bold transition-all ${bgColor} ${
-                                        isSelected
-                                          ? "ring-4 ring-cyan-500 z-10"
-                                          : ""
-                                      }`}
+                                      className={`h-14 flex items-center justify-center text-lg font-bold transition-all ${bgColor} ${isSelected
+                                        ? "ring-4 ring-cyan-500 z-10"
+                                        : ""
+                                        }`}
                                     >
                                       {isSelected && (
                                         <div className="w-4 h-4 bg-cyan-500 rounded-full border-2 border-white"></div>
@@ -2004,11 +2003,10 @@ export default function RiskAssessments() {
                                   return (
                                     <div
                                       key={`${prob}-${damage}`}
-                                      className={`h-14 flex items-center justify-center text-lg font-bold transition-all ${bgColor} ${
-                                        isSelected
-                                          ? "ring-4 ring-cyan-500 z-10"
-                                          : ""
-                                      }`}
+                                      className={`h-14 flex items-center justify-center text-lg font-bold transition-all ${bgColor} ${isSelected
+                                        ? "ring-4 ring-cyan-500 z-10"
+                                        : ""
+                                        }`}
                                     >
                                       {isSelected && (
                                         <div className="w-4 h-4 bg-cyan-500 rounded-full border-2 border-white"></div>
@@ -2115,14 +2113,14 @@ export default function RiskAssessments() {
                             // Check if any measure has this status
                             const isActive = selectedRisk?.measures?.some((m) => m.progress_status === status);
                             const hasMeasures = selectedRisk?.measures && selectedRisk.measures.length > 0;
-                            
+
                             return (
                               <button
                                 key={status}
                                 onClick={async (e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  
+
                                   if (!hasMeasures) {
                                     toast({
                                       title: language === "de" ? "Info" : "Info",
@@ -2130,12 +2128,12 @@ export default function RiskAssessments() {
                                     });
                                     return;
                                   }
-                                  
+
                                   // Update all measures for this risk (or just the first one? The logic updates only the first one)
                                   // The original logic updated the first measure found.
                                   const measureToUpdate = selectedRisk.measures[0];
                                   if (measureToUpdate.id) {
-                                    
+
                                     // Optimistic update
                                     if (selectedRisk) {
                                       const updatedMeasures = selectedRisk.measures?.map((m) =>
@@ -2194,10 +2192,10 @@ export default function RiskAssessments() {
                             variant="outline"
                             onClick={async () => {
                               if (!selectedRisk) return;
-                              
+
                               // Optimistic update (for internal state consistency)
                               setSelectedRisk({ ...selectedRisk, notes: editableNotes });
-                              
+
                               const { error } = await supabase
                                 .from("risk_assessments")
                                 .update({ notes: editableNotes })
