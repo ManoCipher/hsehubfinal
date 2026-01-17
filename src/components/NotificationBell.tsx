@@ -46,7 +46,7 @@ export default function NotificationBell() {
       const { data, error } = await supabase
         .from("notifications")
         .select("*")
-        .eq("company_id", companyId)
+        .eq("user_id", user?.id)
         .order("created_at", { ascending: false })
         .limit(20);
 
@@ -68,7 +68,7 @@ export default function NotificationBell() {
           event: "INSERT",
           schema: "public",
           table: "notifications",
-          filter: `company_id=eq.${companyId}`,
+          filter: `user_id=eq.${user?.id}`,
         },
         (payload) => {
           const newNotif = payload.new as Notification;
@@ -115,7 +115,7 @@ export default function NotificationBell() {
       const { error } = await supabase
         .from("notifications")
         .update({ is_read: true })
-        .eq("company_id", companyId)
+        .eq("user_id", user?.id)
         .eq("is_read", false);
 
       if (error) throw error;
