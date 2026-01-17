@@ -1294,23 +1294,35 @@ function OverviewSection({
         </div>
       </ResponsiveGridLayout>
 
-      {/* Custom Reports - 2 Column Grid */}
+      {/* Custom Reports - Draggable and Resizable Grid */}
       {customReports && customReports.length > 0 && (
         <div className="mt-12">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-semibold">Custom Reports</h3>
-              <p className="text-sm text-muted-foreground">Click on any report to view details</p>
-            </div>
-          </div>
-
-          {/* 2 Column Grid Layout */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Draggable/Resizable Grid Layout for Custom Reports */}
+          <ResponsiveGridLayout
+            className="layout"
+            layouts={customReportsLayouts}
+            breakpoints={{ lg: 1200, md: 996, sm: 768 }}
+            cols={{ lg: 12, md: 10, sm: 6 }}
+            rowHeight={70}
+            onLayoutChange={(currentLayout: any[], allLayouts: any) => {
+              setCustomReportsLayouts(allLayouts);
+              try {
+                localStorage.setItem(CUSTOM_REPORTS_LAYOUT_KEY, JSON.stringify(allLayouts));
+              } catch (error) {
+                console.error("Error saving custom reports layout:", error);
+              }
+            }}
+            draggableHandle=".drag-handle"
+            isResizable={true}
+            isDraggable={true}
+            margin={[12, 12]}
+            containerPadding={[0, 0]}
+            compactType="vertical"
+          >
             {customReports.map((report, index) => (
               <div
                 key={`custom-report-${index}`}
-                className="cursor-pointer transition-transform hover:scale-[1.02]"
-                onClick={() => onViewReport(report)}
+                className="cursor-pointer"
               >
                 <ReportWidget
                   config={report}
@@ -1321,7 +1333,7 @@ function OverviewSection({
                 />
               </div>
             ))}
-          </div>
+          </ResponsiveGridLayout>
         </div>
       )}
     </div>

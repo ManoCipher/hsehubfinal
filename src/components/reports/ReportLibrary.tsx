@@ -28,13 +28,6 @@ const REPORT_TEMPLATES = [
         chartType: "pie" as const,
         description: "See where your workforce is located",
       },
-      {
-        title: "New Hires Over Time",
-        metric: "employees",
-        groupBy: "created_at",
-        chartType: "line" as const,
-        description: "Track hiring trends over time",
-      },
     ],
   },
   {
