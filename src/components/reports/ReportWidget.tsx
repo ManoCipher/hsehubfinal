@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { MoreVertical, Edit, Copy, Trash2, Download, GripVertical } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -49,7 +49,7 @@ export default function ReportWidget({
   const hasData = chartData && chartData.length > 0;
 
   const renderChart = () => {
-    const height = 280; // Increased height for larger cards
+    const height = 200; // Compact height for horizontal cards
 
     if (!hasData) {
       return (
@@ -71,7 +71,7 @@ export default function ReportWidget({
                 cy="50%"
                 labelLine={false}
                 label={({ name, value }) => `${name}: ${value}`}
-                outerRadius={80}
+                outerRadius={70}
                 fill="#8884d8"
                 dataKey="value"
               >
@@ -117,25 +117,24 @@ export default function ReportWidget({
 
   return (
     <Card className="dashboard-grid-card hover:shadow-lg transition-shadow h-full flex flex-col overflow-hidden">
-      {/* Combined Drag Handle and Header */}
-      <div className="drag-handle border-b cursor-move hover:bg-muted/50 transition-colors py-2 px-3 flex items-center justify-between bg-muted/10 shrink-0 h-10">
-        <div className="flex items-center gap-2 min-w-0 overflow-hidden">
-          <GripVertical className="w-4 h-4 text-muted-foreground/50 shrink-0" />
-          <div className="flex flex-col min-w-0">
-            <span className="text-sm font-semibold truncate leading-tight" title={config.title}>
-              {config.title}
-            </span>
-            <span className="text-[10px] text-muted-foreground truncate">
-              {config.metric === 'incidents' ? `Type: ${config.incidentType || 'All'}` :
-                config.metric === 'audits' ? `Template: ${config.auditTemplate || 'All'}` :
-                  `Group: ${config.groupBy}`}
-            </span>
-          </div>
-        </div>
+      <div className="drag-handle border-b cursor-move hover:bg-muted/50 transition-colors p-1 flex items-center justify-center bg-muted/10 h-4">
+        <GripVertical className="w-3 h-3 text-muted-foreground/30" />
+      </div>
 
+      <CardHeader className="p-3 pb-0 flex-row items-center justify-between space-y-0 gap-2 shrink-0">
+        <div className="min-w-0 flex-1">
+          <CardTitle className="text-sm font-semibold truncate leading-tight" title={config.title}>
+            {config.title}
+          </CardTitle>
+          <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+            {config.metric === 'incidents' ? `Type: ${config.incidentType || 'All'}` :
+              config.metric === 'audits' ? `Template: ${config.auditTemplate || 'All'}` :
+                `Group: ${config.groupBy}`}
+          </p>
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-6 w-6 p-0 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <Button variant="ghost" className="h-6 w-6 p-0 shrink-0">
               <MoreVertical className="h-3 w-3" />
             </Button>
           </DropdownMenuTrigger>
@@ -161,13 +160,13 @@ export default function ReportWidget({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      </div>
+      </CardHeader>
 
-      <CardContent className="flex-1 p-3 pt-2 min-h-0 flex flex-col overflow-hidden">
-        <div className="flex-1 min-h-[200px] overflow-hidden flex flex-col justify-center">
+      <CardContent className="flex-1 p-2 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-[120px]">
           {renderChart()}
         </div>
-        <div className="mt-2 text-[10px] text-muted-foreground text-center border-t pt-1.5 shrink-0">
+        <div className="mt-1 text-[10px] text-muted-foreground text-center border-t pt-1">
           Total: {chartData.reduce((sum, d) => sum + d.value, 0)}
         </div>
       </CardContent>
