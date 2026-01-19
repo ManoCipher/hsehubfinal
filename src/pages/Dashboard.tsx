@@ -215,7 +215,7 @@ export default function Dashboard() {
     try {
       console.log("=== Fetching Investigation Stats ===");
       console.log("Company ID:", companyId);
-      
+
       // Fetch both health checkups and investigations
       const [checkupsResult, investigationsResult] = await Promise.all([
         supabase
@@ -264,10 +264,10 @@ export default function Dashboard() {
         statusCounts.planned +
         statusCounts.due +
         statusCounts.done;
-        
+
       console.log("Combined Status Breakdown:", statusCounts);
       console.log("Total (Checkups + Investigations):", total);
-      
+
       setInvestigationStats([
         {
           status: "Open",
@@ -564,12 +564,12 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
+                    <PieChart margin={{ top: 20, right: 30, left: 30, bottom: 0 }}>
                       <Pie
                         data={investigationStats}
                         cx="50%"
                         cy="50%"
-                        labelLine={false}
+                        labelLine={true}
                         label={(entry) => {
                           const percent = parseFloat(
                             (entry.percent * 100).toFixed(0)
@@ -578,7 +578,7 @@ export default function Dashboard() {
                             ? `${entry.status}: ${entry.count}`
                             : "";
                         }}
-                        outerRadius={investigationStats.length === 1 ? 100 : 80}
+                        outerRadius="55%"
                         innerRadius={0}
                         fill="#8884d8"
                         dataKey="count"
@@ -702,11 +702,10 @@ export default function Dashboard() {
                           {/* Task Content */}
                           <div className="flex-1 min-w-0">
                             <p
-                              className={`font-semibold text-sm mb-1.5 ${
-                                task.status === "completed"
+                              className={`font-semibold text-sm mb-1.5 ${task.status === "completed"
                                   ? "line-through text-muted-foreground"
                                   : ""
-                              }`}
+                                }`}
                             >
                               {task.title}
                             </p>
@@ -749,16 +748,16 @@ export default function Dashboard() {
                             <Badge
                               variant={
                                 task.priority === "high" ||
-                                task.priority === "urgent"
+                                  task.priority === "urgent"
                                   ? "destructive"
                                   : task.priority === "medium"
-                                  ? "default"
-                                  : "secondary"
+                                    ? "default"
+                                    : "secondary"
                               }
                               className="text-xs font-semibold px-2.5 py-0.5 flex items-center gap-1"
                             >
                               {task.priority === "high" ||
-                              task.priority === "urgent" ? (
+                                task.priority === "urgent" ? (
                                 <AlertTriangle className="w-3 h-3" />
                               ) : task.priority === "medium" ? (
                                 <span className="w-1.5 h-1.5 rounded-full bg-current"></span>

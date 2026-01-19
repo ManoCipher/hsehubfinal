@@ -64,14 +64,14 @@ export default function ReportWidget({
       case 'pie':
         return (
           <ResponsiveContainer width="100%" height={height}>
-            <RechartsPie>
+            <RechartsPie margin={{ top: 20, right: 30, left: 30, bottom: 0 }}>
               <Pie
                 data={chartData}
                 cx="50%"
                 cy="50%"
-                labelLine={false}
+                labelLine={true}
                 label={({ name, value }) => `${name}: ${value}`}
-                outerRadius={80} // Increased radius slightly
+                outerRadius="50%"
                 fill="#8884d8"
                 dataKey="value"
               >
@@ -88,15 +88,15 @@ export default function ReportWidget({
       case 'bar':
         return (
           <ResponsiveContainer width="100%" height={height}>
-            <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+            <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis
                 dataKey="name"
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 10, angle: -45, textAnchor: 'end' }}
                 tickLine={false}
                 axisLine={false}
                 interval={0}
-                height={40}
+                height={60}
               />
               <YAxis
                 tick={{ fontSize: 11 }}
@@ -113,14 +113,14 @@ export default function ReportWidget({
       case 'line':
         return (
           <ResponsiveContainer width="100%" height={height}>
-            <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+            <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis
                 dataKey="name"
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 10, angle: -45, textAnchor: 'end' }}
                 tickLine={false}
                 axisLine={false}
-                height={40}
+                height={60}
               />
               <YAxis
                 tick={{ fontSize: 11 }}

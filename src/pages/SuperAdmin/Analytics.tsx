@@ -617,13 +617,13 @@ export default function Analytics() {
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
+                <PieChart margin={{ top: 20, right: 30, left: 30, bottom: 0 }}>
                   <Pie
                     data={tierBreakdown}
                     cx="50%"
                     cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
+                    innerRadius="40%"
+                    outerRadius="60%"
                     paddingAngle={5}
                     dataKey="value"
                     label={({ name, value }) => `${name}: ${value}`}
