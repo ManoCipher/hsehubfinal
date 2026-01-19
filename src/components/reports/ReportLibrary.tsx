@@ -28,13 +28,7 @@ const REPORT_TEMPLATES = [
         chartType: "pie" as const,
         description: "See where your workforce is located",
       },
-      {
-        title: "New Hires Over Time",
-        metric: "employees",
-        groupBy: "created_at",
-        chartType: "line" as const,
-        description: "Track hiring trends over time",
-      },
+
     ],
   },
   {
@@ -125,7 +119,7 @@ const REPORT_TEMPLATES = [
       {
         title: "Risks by Level",
         metric: "risks",
-        groupBy: "priority",
+        groupBy: "risk_level",
         chartType: "pie" as const,
         description: "Distribution of risk severity",
       },
@@ -139,7 +133,7 @@ const REPORT_TEMPLATES = [
       {
         title: "Risk Approval Status",
         metric: "risks",
-        groupBy: "status",
+        groupBy: "approval_status",
         chartType: "pie" as const,
         description: "Track risk approval workflow",
       },

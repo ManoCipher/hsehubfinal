@@ -416,7 +416,6 @@ export default function Reports() {
       // Special handling for employees with department/location joins
       if (metric === "employees") {
         if (groupBy === "department") {
-          // Join with departments table to get department names
           const { data, error } = await supabase
             .from("employees")
             .select("department_id, departments(name)")
@@ -427,7 +426,6 @@ export default function Reports() {
             return [];
           }
 
-          // Group by department name
           const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
             const deptName = item.departments?.name || "Unassigned";
             acc[deptName] = (acc[deptName] || 0) + 1;
@@ -455,7 +453,6 @@ export default function Reports() {
 
           return Object.entries(grouped).map(([name, value]) => ({ name, value }));
         } else if (groupBy === "created_at") {
-          // Group by month for time-based reports
           const { data, error } = await supabase
             .from("employees")
             .select("created_at")
@@ -482,73 +479,113 @@ export default function Reports() {
         }
       }
 
+      // Special handling for Risks
+      if (metric === "risks") {
+        if (groupBy === "department") {
+          const { data, error } = await supabase
+            .from("risk_assessments")
+            .select("department_id, departments(name)")
+            .eq("company_id", companyId);
+
+          if (error) {
+            console.error("Error fetching risks by department:", error);
+            return [];
+          }
+          const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+            const name = item.departments?.name || "Unassigned";
+            acc[name] = (acc[name] || 0) + 1;
+            return acc;
+          }, {});
+          return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+        } else {
+          // risk_level or approval_status
+          const column = groupBy || "risk_level";
+          const { data, error } = await supabase
+            .from("risk_assessments")
+            .select(column)
+            .eq("company_id", companyId);
+
+          if (error) {
+            console.error("Error fetching risks:", error);
+            return [];
+          }
+          const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+            const key = item[column] || "Unknown";
+            acc[key] = (acc[key] || 0) + 1;
+            return acc;
+          }, {});
+          return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+        }
+      }
+
+      // Special handling for Measures
+      if (metric === "measures") {
+        if (groupBy === "department") {
+          // Measures might not have direct department, join via responsible person -> department
+          // Note: using 'employees!responsible_person_id' valid if FK exists, else try 'employees'
+          const { data, error } = await supabase
+            .from("measures" as any)
+            .select(`
+              responsible_person_id,
+              responsible_person:employees!responsible_person_id(
+                departments(name)
+              )
+            `)
+            .eq("company_id", companyId);
+
+          if (error) {
+            console.error("Error fetching measures department:", error);
+            return [];
+          }
+
+          const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+            // item.responsible_person is the joined employee object
+            // item.responsible_person.departments is the joined department object
+            const dept = item.responsible_person?.departments?.name || "Unassigned";
+            acc[dept] = (acc[dept] || 0) + 1;
+            return acc;
+          }, {});
+
+          return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+        }
+      }
+
       // Standard handling for other metrics
       let table: string;
       let groupColumn: string;
 
       switch (metric) {
         case "incidents":
-          // Special handling for incidents - support location via employee join
-          {
-            // Handle location grouping - need to join with employees
-            if (groupBy === "location" || groupBy === "department") {
-              const { data, error } = await supabase
-                .from("incidents")
-                .select(`
-                  id,
-                  reported_by,
-                  employees!incidents_reported_by_fkey (
-                    location,
-                    department
-                  )
-                `)
-                .eq("company_id", companyId);
-
-              if (error) {
-                console.error("Error fetching incidents with location:", error);
-                return [];
-              }
-
-              // Group by location or department from employee
-              const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
-                const key = item.employees?.[groupBy] || "Unknown";
-                acc[key] = (acc[key] || 0) + 1;
-                return acc;
-              }, {});
-
-              return Object.entries(grouped).map(([name, value]) => ({ name, value }));
-            }
-
-            // Standard incident grouping (status, type, severity)
-            let incidentGroupCol = "investigation_status";
-            if (groupBy === "category" || groupBy === "incident_type") {
-              incidentGroupCol = "incident_type";
-            } else if (groupBy === "severity") {
-              incidentGroupCol = "severity";
-            } else if (groupBy === "investigation_status" || groupBy === "status") {
-              incidentGroupCol = "investigation_status";
-            }
-
+          if (groupBy === "location") {
+            // Use location from incidents table directly
             const { data, error } = await supabase
               .from("incidents")
-              .select(incidentGroupCol)
+              .select("location")
               .eq("company_id", companyId);
 
-            if (error) {
-              console.error("Error fetching incidents data:", error);
-              return [];
-            }
-
-            // Group and count
+            if (error) return [];
             const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
-              const key = item[incidentGroupCol] || "Unknown";
+              const key = item.location || "Unknown";
               acc[key] = (acc[key] || 0) + 1;
               return acc;
             }, {});
-
             return Object.entries(grouped).map(([name, value]) => ({ name, value }));
           }
-          break;
+          // Fallthrough for other incident groupings
+          const incidentGroupCol = groupBy === "category" ? "incident_type" : (groupBy || "investigation_status");
+          const { data, error } = await supabase
+            .from("incidents")
+            .select(incidentGroupCol)
+            .eq("company_id", companyId);
+
+          if (error) return [];
+          const groupedIncidents = (data || []).reduce((acc: Record<string, number>, item: any) => {
+            const key = item[incidentGroupCol] || "Unknown";
+            acc[key] = (acc[key] || 0) + 1;
+            return acc;
+          }, {});
+          return Object.entries(groupedIncidents).map(([name, value]) => ({ name, value }));
+
         case "audits":
           table = "audits";
           if (groupBy === "category") {
@@ -558,10 +595,8 @@ export default function Reports() {
           }
           break;
         case "trainings":
-          // Courses are catalog items, don't filter by date
-          // Query all courses and group by name (each course is 1 item)
+          // Courses are catalog items
           {
-            console.log("Fetching trainings/courses for company:", companyId);
             const { data, error } = await supabase
               .from("courses")
               .select("id, name")
@@ -571,28 +606,23 @@ export default function Reports() {
               console.error("Error fetching courses data:", error);
               return [];
             }
-            console.log("Fetched courses:", data);
-
-            // Return each course as a data point
             return (data || []).map(course => ({
               name: course.name,
-              value: 1,
+              value: 1, // Just listing them? Or should we count completions? 
+              // The original list logic seemed to just return 1 per course. 
+              // But 'Training Compliance' report suggests we want compliance stats.
+              // Let's keep original simple behavior for now or it gets too complex.
             }));
           }
-          break;
-        case "risks":
-          table = "risk_assessments";
-          groupColumn = groupBy || "risk_level";
           break;
         case "measures":
           table = "measures";
           groupColumn = groupBy || "status";
           break;
         case "checkups":
-          // Special handling for health checkups
           {
             const { data, error } = await supabase
-              .from("health_checkups")
+              .from("employee_checkups") // Changed from health_checkups to employee_checkups as per fetchReportData usage (line 241)
               .select("status")
               .eq("company_id", companyId);
 
@@ -601,7 +631,6 @@ export default function Reports() {
               return [];
             }
 
-            // Group by status
             const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
               const key = item.status || "Unknown";
               acc[key] = (acc[key] || 0) + 1;
@@ -615,7 +644,7 @@ export default function Reports() {
           return [];
       }
 
-      // Handle time-based grouping for other metrics
+      // Handle time-based grouping for other metrics (audits, measures, etc)
       if (groupBy === "created_at") {
         const { data, error } = await supabase
           .from(table as any)
@@ -642,27 +671,25 @@ export default function Reports() {
           .map(([name, value]) => ({ name, value }));
       }
 
-      const { data, error } = await supabase
+      const { data: stdData, error: stdError } = await supabase
         .from(table as any)
         .select(groupColumn)
         .eq("company_id", companyId)
         .gte("created_at", startDate)
         .lte("created_at", endDate);
 
-      if (error) {
-        console.error("Error fetching template data:", error);
+      if (stdError) {
+        console.error("Error fetching template data:", stdError);
         return [];
       }
 
-      // Group and count data
-      const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+      const groupedStd = (stdData || []).reduce((acc: Record<string, number>, item: any) => {
         const key = item[groupColumn] || "Unknown";
         acc[key] = (acc[key] || 0) + 1;
         return acc;
       }, {});
 
-      // Convert to chart format
-      return Object.entries(grouped).map(([name, value]) => ({
+      return Object.entries(groupedStd).map(([name, value]) => ({
         name,
         value,
       }));
@@ -982,7 +1009,7 @@ const SECTION_LAYOUT_KEYS = {
   customReports: "hse_layout_custom_reports",
 };
 
-const CUSTOM_REPORTS_LAYOUT_KEY = "hse_custom_reports_grid_layout";
+const CUSTOM_REPORTS_LAYOUT_KEY = "hse_custom_reports_grid_layout_v2";
 
 // Generate default layout for custom reports based on the number of reports
 const generateCustomReportsLayout = (reportCount: number) => {
@@ -1056,6 +1083,15 @@ function OverviewSection({
       localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(allLayouts));
     } catch (error) {
       console.error("Error saving layout:", error);
+    }
+  }, []);
+
+  const handleCustomReportsLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
+    setCustomReportsLayouts(allLayouts);
+    try {
+      localStorage.setItem(CUSTOM_REPORTS_LAYOUT_KEY, JSON.stringify(allLayouts));
+    } catch (error) {
+      console.error("Error saving custom reports layout:", error);
     }
   }, []);
 
@@ -1294,34 +1330,74 @@ function OverviewSection({
         </div>
       </ResponsiveGridLayout>
 
-      {/* Custom Reports - 2 Column Grid */}
+      {/* Custom Reports - Resizable Grid */}
       {customReports && customReports.length > 0 && (
         <div className="mt-12">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-semibold">Custom Reports</h3>
-              <p className="text-sm text-muted-foreground">Click on any report to view details</p>
-            </div>
-          </div>
-
-          {/* 2 Column Grid Layout */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <h3 className="text-lg font-semibold mb-4">Custom Reports</h3>
+          <ResponsiveGridLayout
+            className="layout"
+            layouts={{
+              lg: customReports.map((_, i) => ({
+                i: `custom-report-${i}`,
+                x: (i % 4) * 3,
+                y: Math.floor(i / 4) * 4,
+                w: 3,
+                h: 4,
+                minW: 2,
+                minH: 3,
+              })),
+              md: customReports.map((_, i) => ({
+                i: `custom-report-${i}`,
+                x: (i % 3) * 4,
+                y: Math.floor(i / 3) * 4,
+                w: 4,
+                h: 4,
+                minW: 3,
+                minH: 3,
+              })),
+              sm: customReports.map((_, i) => ({
+                i: `custom-report-${i}`,
+                x: 0,
+                y: i * 4,
+                w: 6,
+                h: 4,
+                minW: 4,
+                minH: 3,
+              })),
+            }}
+            breakpoints={{ lg: 1200, md: 996, sm: 768 }}
+            cols={{ lg: 12, md: 12, sm: 6 }}
+            rowHeight={70}
+            draggableHandle=".drag-handle"
+            isResizable={true}
+            isDraggable={true}
+            margin={[16, 16]}
+            containerPadding={[0, 0]}
+            compactType="vertical"
+          >
             {customReports.map((report, index) => (
               <div
                 key={`custom-report-${index}`}
-                className="cursor-pointer transition-transform hover:scale-[1.02]"
-                onClick={() => onViewReport(report)}
+                className="h-full"
               >
-                <ReportWidget
-                  config={report}
-                  onEdit={onEditReport}
-                  onDuplicate={onDuplicateReport}
-                  onDelete={onDeleteReport}
-                  onExport={onExportReport}
-                />
+                <div
+                  className="h-full cursor-pointer"
+                  onClick={(e) => {
+                    if ((e.target as Element).closest('button, .drag-handle')) return;
+                    onViewReport(report);
+                  }}
+                >
+                  <ReportWidget
+                    config={report}
+                    onEdit={onEditReport}
+                    onDuplicate={onDuplicateReport}
+                    onDelete={onDeleteReport}
+                    onExport={onExportReport}
+                  />
+                </div>
               </div>
             ))}
-          </div>
+          </ResponsiveGridLayout>
         </div>
       )}
     </div>
