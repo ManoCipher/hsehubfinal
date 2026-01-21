@@ -1158,15 +1158,42 @@ function OverviewSection({
     }
   }, []);
 
-  // Reset layout to defaults
+  // Reset layout to 2-column default
   const resetLayout = useCallback(() => {
-    setLayouts(defaultLayouts);
-    localStorage.removeItem(LAYOUT_STORAGE_KEY);
+    // Reset main dashboard layout
+    const defaultResetLayouts = { lg: defaultLayouts.lg, md: defaultLayouts.md, sm: defaultLayouts.sm };
+    setLayouts(defaultResetLayouts);
+    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(defaultResetLayouts));
+
+    // Reset custom reports to 2-column layout
+    const customResetLayouts: any = { lg: [], md: [], sm: [] };
+    const breakpoints = ['lg', 'md', 'sm'];
+
+    // Simple 2-column layout: w=1 means 50% width when cols=2
+    breakpoints.forEach(bp => {
+      const cols = bp === 'sm' ? 1 : 2; // 1 column on small screens, 2 on larger
+      customResetLayouts[bp] = customReports.map((report, index) => ({
+        i: `report-${report.id}`,
+        x: cols === 1 ? 0 : (index % 2),  // 2 columns or 1 column
+        y: cols === 1 ? index : Math.floor(index / 2),  // Stack vertically
+        w: 1,  // Each card takes 1 column (50% when cols=2, 100% when cols=1)
+        h: 1,  // 1 row unit = 200px (based on rowHeight)
+        minW: 1,
+        minH: 1,
+        static: false,
+      }));
+    });
+
+    setCustomReportsLayouts(customResetLayouts);
+    localStorage.setItem(CUSTOM_REPORTS_LAYOUT_KEY, JSON.stringify(customResetLayouts));
+
     toast({
       title: "Layout Reset",
-      description: "Dashboard layout has been reset to default",
+      description: "Dashboard layout has been reset to default 2-column view",
     });
-  }, [toast]);
+  }, [customReports, toast]);
+
+
 
   // Sync custom reports layout when reports change (add/remove/duplicate)
   useEffect(() => {
@@ -1178,25 +1205,27 @@ function OverviewSection({
       const breakpoints = ['lg', 'md', 'sm'];
       let hasChanges = false;
 
+      // Simple 2-column layout: w=1 means 50% width when cols=2
       breakpoints.forEach(bp => {
         const bpLayout = [...(newLayouts[bp] || [])];
+        const cols = bp === 'sm' ? 1 : 2; // 1 column on small screens, 2 on larger
 
         // Get existing layout item keys
         const existingKeys = new Set(bpLayout.map(item => item.i));
 
-        // Add layout items for new reports (using report ID as key)
+        // Add layout items for new reports
         customReports.forEach((report, index) => {
           const key = `report-${report.id}`;
           if (!existingKeys.has(key)) {
             hasChanges = true;
             bpLayout.push({
-              i: key,  // Use report ID instead of index
-              x: (index % 2) * 6,  // 2 columns layout (50% width each)
-              y: Math.floor(index / 2) * 4,  // Row spacing
-              w: 6,  // Width: 6 grid units (50% of 12)
-              h: 4,  // Height: 4 units (280px)
-              minW: 4,  // Minimum width
-              minH: 3,  // Minimum height
+              i: key,
+              x: cols === 1 ? 0 : (index % 2),  // 2 columns or 1 column
+              y: cols === 1 ? index : Math.floor(index / 2),  // Stack vertically
+              w: 1,  // 1 column width
+              h: 1,  // 1 row height
+              minW: 1,
+              minH: 1,
               static: false,
             });
           }
@@ -1399,41 +1428,38 @@ function OverviewSection({
         </div>
       </ResponsiveGridLayout>
 
-      {/* Custom Reports Section */}
+      {/* Custom Reports - Draggable Grid */}
       {customReports && customReports.length > 0 && (
-        <div className="mt-16 w-full">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="h-px flex-1 bg-border"></div>
-            <h3 className="text-lg font-semibold text-muted-foreground">Your Custom Reports</h3>
-            <div className="h-px flex-1 bg-border"></div>
-          </div>
-
-          {/* Simple 2-column grid - guaranteed to work */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
-            {customReports.map((report) => (
-              <div
-                key={`report-${report.id}`}
-                className="h-[280px]"
-              >
-                <div
-                  className="h-full cursor-pointer"
-                  onClick={(e) => {
-                    if ((e.target as Element).closest('button')) return;
-                    onViewReport(report);
-                  }}
-                >
-                  <ReportWidget
-                    config={report}
-                    onEdit={onEditReport}
-                    onDuplicate={onDuplicateReport}
-                    onDelete={onDeleteReport}
-                    onExport={onExportReport}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <ResponsiveGridLayout
+          className="layout mt-8"
+          layouts={customReportsLayouts}
+          breakpoints={{ lg: 1200, md: 996, sm: 768 }}
+          cols={{ lg: 2, md: 2, sm: 1 }}
+          rowHeight={200}
+          onLayoutChange={handleCustomReportsLayoutChange}
+          draggableHandle=".drag-handle"
+          isResizable={true}
+          isDraggable={true}
+          margin={[16, 16]}
+          containerPadding={[0, 0]}
+          compactType="vertical"
+          useCSSTransforms={false}
+        >
+          {customReports.map((report) => (
+            <div
+              key={`report-${report.id}`}
+              className="h-full"
+            >
+              <ReportWidget
+                config={report}
+                onEdit={onEditReport}
+                onDuplicate={onDuplicateReport}
+                onDelete={onDeleteReport}
+                onExport={onExportReport}
+              />
+            </div>
+          ))}
+        </ResponsiveGridLayout>
       )}
     </div>
   );
@@ -1482,7 +1508,8 @@ function DraggableGridSection({
     [sectionId]
   );
 
-  const resetLayout = useCallback(() => {
+  // Reset layout to default
+  const onResetLayout = useCallback(() => {
     const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
     setLayouts(defaultLayouts);
     localStorage.removeItem(SECTION_LAYOUT_KEYS[sectionId as keyof typeof SECTION_LAYOUT_KEYS]);
@@ -1515,7 +1542,7 @@ function DraggableGridSection({
           <h2 className="text-2xl font-bold mb-2">{title}</h2>
           <p className="text-muted-foreground">{description}</p>
         </div>
-        <Button variant="outline" size="sm" onClick={resetLayout}>
+        <Button variant="outline" size="sm" onClick={onResetLayout}>
           <RotateCcw className="w-4 h-4 mr-2" />
           Reset Layout
         </Button>
@@ -1527,6 +1554,9 @@ function DraggableGridSection({
         breakpoints={{ lg: 1200, md: 996, sm: 768 }}
         cols={{ lg: 12, md: 10, sm: 6 }}
         rowHeight={70}
+        useCSSTransforms={false}
+        preventCollision={false}
+        autoSize={true}
         onLayoutChange={handleLayoutChange}
         draggableHandle=".drag-handle"
         isResizable={true}
@@ -1939,10 +1969,15 @@ function TrainingsSection({
     }
   }, []);
 
+
   const resetLayout = useCallback(() => {
     const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
     setLayouts(defaultLayouts);
-    localStorage.removeItem('hse_layout_trainings');
+    try {
+      localStorage.removeItem('hse_layout_trainings');
+    } catch (e) {
+      console.error(e);
+    }
     toast({ title: "Layout Reset", description: "Trainings layout has been reset to default" });
   }, [toast]);
 

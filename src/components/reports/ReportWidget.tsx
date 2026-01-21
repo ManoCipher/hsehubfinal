@@ -1,6 +1,22 @@
-import { useState } from "react";
-import { MoreVertical, Edit, Copy, Trash2, Download, GripVertical } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  MoreVertical,
+  Edit,
+  Copy,
+  Trash2,
+  Download,
+  GripVertical,
+  Users,
+  Shield,
+  ClipboardCheck,
+  AlertTriangle,
+  GraduationCap,
+  CheckCircle,
+  FileText,
+  Building,
+  Calendar,
+  Activity
+} from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -8,21 +24,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  PieChart as RechartsPie,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from "recharts";
 import { ReportConfig } from "./ReportBuilder";
 
 interface ReportWidgetProps {
@@ -34,7 +35,41 @@ interface ReportWidgetProps {
   onExport: (config: ReportConfig) => void;
 }
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82ca9d'];
+// Icon and color mapping based on metric type
+const getMetricStyle = (metric: string) => {
+  switch (metric) {
+    case 'employees':
+      return { icon: Users, bgColor: 'bg-blue-50', iconColor: 'text-blue-600' };
+    case 'risk_assessments':
+      return { icon: Shield, bgColor: 'bg-orange-50', iconColor: 'text-orange-600' };
+    case 'audits':
+      return { icon: ClipboardCheck, bgColor: 'bg-blue-50', iconColor: 'text-blue-600' };
+    case 'incidents':
+      return { icon: AlertTriangle, bgColor: 'bg-red-50', iconColor: 'text-red-600' };
+    case 'trainings':
+      return { icon: GraduationCap, bgColor: 'bg-green-50', iconColor: 'text-green-600' };
+    case 'tasks':
+      return { icon: CheckCircle, bgColor: 'bg-purple-50', iconColor: 'text-purple-600' };
+    case 'measures':
+      return { icon: FileText, bgColor: 'bg-indigo-50', iconColor: 'text-indigo-600' };
+    default:
+      return { icon: Activity, bgColor: 'bg-gray-50', iconColor: 'text-gray-600' };
+  }
+};
+
+// Get subtitle based on report configuration
+const getSubtitle = (config: ReportConfig) => {
+  if (config.metric === 'incidents' && config.incidentType) {
+    return `Type: ${config.incidentType}`;
+  }
+  if (config.metric === 'audits' && config.auditTemplate) {
+    return `Template: ${config.auditTemplate}`;
+  }
+  if (config.groupBy) {
+    return `By ${config.groupBy}`;
+  }
+  return 'Total count';
+};
 
 export default function ReportWidget({
   config,
@@ -44,156 +79,74 @@ export default function ReportWidget({
   onDelete,
   onExport,
 }: ReportWidgetProps) {
-  // Generate sample/mock data if none provided
+  // Calculate total value from data
   const chartData = (data && data.length > 0) ? data : (config.data || []);
-  const hasData = chartData && chartData.length > 0;
+  const totalValue = chartData.reduce((sum, d) => sum + (d.value || 0), 0);
 
-  const renderChart = () => {
-    const height = "100%";
-
-    if (!hasData) {
-      const metricName = config.metric?.charAt(0).toUpperCase() + config.metric?.slice(1) || 'Data';
-      return (
-        <div className="flex flex-col items-center justify-center p-6 text-muted-foreground border-2 border-dashed rounded-lg h-full min-h-[200px]">
-          <GripVertical className="w-10 h-10 mb-3 opacity-20" />
-          <p className="font-medium text-foreground mb-1">No data available</p>
-          <p className="text-xs text-center">
-            Add {metricName.toLowerCase()} to your database<br />to see this report
-          </p>
-        </div>
-      );
-    }
-
-    switch (config.chartType) {
-      case 'pie':
-        return (
-          <ResponsiveContainer width="100%" height={height}>
-            <RechartsPie margin={{ top: 20, right: 30, left: 30, bottom: 0 }}>
-              <Pie
-                data={chartData}
-                cx="50%"
-                cy="50%"
-                labelLine={true}
-                label={({ name, value }) => `${name}: ${value}`}
-                outerRadius="50%"
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend verticalAlign="bottom" height={36} />
-            </RechartsPie>
-          </ResponsiveContainer>
-        );
-
-      case 'bar':
-        return (
-          <ResponsiveContainer width="100%" height={height}>
-            <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="name"
-                tick={{ fontSize: 10, angle: -45, textAnchor: 'end' } as any}
-                tickLine={false}
-                axisLine={false}
-                interval={0}
-                height={60}
-              />
-              <YAxis
-                tick={{ fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <Tooltip cursor={{ fill: 'transparent' }} />
-              <Legend verticalAlign="top" align="right" height={36} iconType="circle" />
-              <Bar dataKey="value" fill="#0088FE" radius={[4, 4, 0, 0]} barSize={40} />
-            </BarChart>
-          </ResponsiveContainer>
-        );
-
-      case 'line':
-        return (
-          <ResponsiveContainer width="100%" height={height}>
-            <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="name"
-                tick={{ fontSize: 10, angle: -45, textAnchor: 'end' } as any}
-                tickLine={false}
-                axisLine={false}
-                height={60}
-              />
-              <YAxis
-                tick={{ fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <Tooltip />
-              <Legend verticalAlign="top" align="right" height={36} iconType="circle" />
-              <Line type="monotone" dataKey="value" stroke="#8884d8" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        );
-    }
-  };
+  // Get styling based on metric
+  const { icon: IconComponent, bgColor, iconColor } = getMetricStyle(config.metric || '');
+  const subtitle = getSubtitle(config);
 
   return (
-    <Card className="dashboard-grid-card hover:shadow-lg transition-shadow h-full flex flex-col overflow-hidden">
-      <div className="drag-handle border-b cursor-move hover:bg-muted/50 transition-colors p-1 flex items-center justify-center bg-muted/10 h-4">
-        <GripVertical className="w-3 h-3 text-muted-foreground/30" />
+    <Card className="h-full flex flex-col overflow-hidden border-2 rounded-xl hover:border-primary/30 hover:shadow-md transition-all duration-200">
+      {/* Drag Handle - Clean, subtle design */}
+      <div className="drag-handle cursor-grab active:cursor-grabbing flex items-center justify-center py-2 hover:bg-muted/30 transition-colors">
+        <GripVertical className="w-4 h-4 text-muted-foreground/40" />
       </div>
 
-      <CardHeader className="p-3 pb-0 flex-row items-center justify-between space-y-0 gap-2 shrink-0">
-        <div className="min-w-0 flex-1">
-          <CardTitle className="text-sm font-semibold truncate leading-tight" title={config.title}>
-            {config.title}
-          </CardTitle>
-          <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-            {config.metric === 'incidents' ? `Type: ${config.incidentType || 'All'}` :
-              config.metric === 'audits' ? `Template: ${config.auditTemplate || 'All'}` :
-                `Group: ${config.groupBy}`}
-          </p>
+      {/* Main Content - Centered layout matching KPI cards */}
+      <CardContent className="flex-1 flex flex-col items-center justify-center text-center p-6 relative">
+        {/* Dropdown Menu - Top right */}
+        <div className="absolute top-2 right-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-7 w-7 p-0 hover:bg-muted/50">
+                <MoreVertical className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onEdit(config)}>
+                <Edit className="mr-2 h-4 w-4" />
+                Edit Report
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onDuplicate(config)}>
+                <Copy className="mr-2 h-4 w-4" />
+                Duplicate
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onExport(config)}>
+                <Download className="mr-2 h-4 w-4" />
+                Export Data
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => onDelete(config.id)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-6 w-6 p-0 shrink-0">
-              <MoreVertical className="h-3 w-3" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onEdit(config)}>
-              <Edit className="mr-2 h-4 w-4" />
-              Edit Report
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onDuplicate(config)}>
-              <Copy className="mr-2 h-4 w-4" />
-              Duplicate
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onExport(config)}>
-              <Download className="mr-2 h-4 w-4" />
-              Export Data
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={() => onDelete(config.id)}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </CardHeader>
 
-      <CardContent className="flex-1 p-2 pb-3 min-h-[150px] flex flex-col">
-        <div className="flex-1 w-full min-h-0">
-          {renderChart()}
+        {/* Icon */}
+        <div className={`w-12 h-12 rounded-lg ${bgColor} flex items-center justify-center mb-4`}>
+          <IconComponent className={`w-6 h-6 ${iconColor}`} />
         </div>
-        <div className="mt-2 text-[10px] text-muted-foreground text-center border-t pt-2">
-          Total: {chartData.reduce((sum, d) => sum + d.value, 0)}
-        </div>
+
+        {/* Title */}
+        <h3 className="font-semibold text-foreground text-base mb-1 line-clamp-2" title={config.title}>
+          {config.title}
+        </h3>
+
+        {/* Subtitle */}
+        <p className="text-sm text-muted-foreground mb-4">
+          {subtitle}
+        </p>
+
+        {/* Value */}
+        <p className="text-3xl font-bold text-foreground">
+          {totalValue}
+        </p>
       </CardContent>
     </Card>
   );
