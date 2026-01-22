@@ -565,19 +565,16 @@ export default function Dashboard() {
                 ) : (
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart margin={{ top: 20, right: 30, left: 30, bottom: 0 }}>
+                      <Legend
+                        verticalAlign="bottom"
+                        height={36}
+                        iconSize={10}
+                        wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}
+                      />
                       <Pie
                         data={investigationStats}
                         cx="50%"
                         cy="50%"
-                        labelLine={true}
-                        label={(entry) => {
-                          const percent = parseFloat(
-                            (entry.percent * 100).toFixed(0)
-                          );
-                          return percent > 0
-                            ? `${entry.status}: ${entry.count}`
-                            : "";
-                        }}
                         outerRadius="55%"
                         innerRadius={0}
                         fill="#8884d8"
@@ -703,8 +700,8 @@ export default function Dashboard() {
                           <div className="flex-1 min-w-0">
                             <p
                               className={`font-semibold text-sm mb-1.5 ${task.status === "completed"
-                                  ? "line-through text-muted-foreground"
-                                  : ""
+                                ? "line-through text-muted-foreground"
+                                : ""
                                 }`}
                             >
                               {task.title}

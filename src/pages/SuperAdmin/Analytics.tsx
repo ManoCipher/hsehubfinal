@@ -626,14 +626,18 @@ export default function Analytics() {
                     outerRadius="60%"
                     paddingAngle={5}
                     dataKey="value"
-                    label={({ name, value }) => `${name}: ${value}`}
                   >
                     {tierBreakdown.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
                   <Tooltip />
-                  <Legend />
+                  <Legend
+                    verticalAlign="bottom"
+                    height={36}
+                    iconSize={10}
+                    wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             </div>
