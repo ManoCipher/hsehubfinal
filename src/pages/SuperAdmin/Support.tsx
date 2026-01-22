@@ -469,6 +469,8 @@ export default function Support() {
                                     <Legend
                                         verticalAlign="bottom"
                                         height={36}
+                                        iconSize={10}
+                                        wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}
                                         formatter={(value, entry: any) => (
                                             <span className="text-sm">
                                                 {entry.payload.name}: {entry.payload.value}

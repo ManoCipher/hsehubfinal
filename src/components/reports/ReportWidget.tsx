@@ -180,8 +180,6 @@ export default function ReportWidget({
                 outerRadius="70%"
                 paddingAngle={2}
                 dataKey="value"
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                labelLine={false}
               >
                 {chartData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -190,9 +188,9 @@ export default function ReportWidget({
               <Tooltip />
               <Legend
                 verticalAlign="bottom"
-                height={30}
-                iconSize={8}
-                wrapperStyle={{ fontSize: '11px' }}
+                height={36}
+                iconSize={10}
+                wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}
               />
             </RechartsPie>
           </ResponsiveContainer>
