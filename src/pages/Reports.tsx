@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, startTransition } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useNavigate } from "react-router-dom";
@@ -153,6 +153,79 @@ export default function Reports() {
   const [selectedReport, setSelectedReport] = useState<ReportConfig | null>(null);
   const [reportToDelete, setReportToDelete] = useState<{ id: string; title: string } | null>(null);
 
+  // Layout state for custom reports (lifted from OverviewSection)
+  const CUSTOM_REPORTS_LAYOUT_KEY = "hse_custom_reports_grid_layout_v3_2col";
+
+  // Helper to strictly recalculate layout based on report order (Latest First)
+  const recalculateLayouts = (reports: ReportConfig[]) => {
+    const layouts: any[] = [];
+    const breakpoints = ['lg', 'md', 'sm'];
+    const newLayouts: { [key: string]: any[] } = {};
+
+    breakpoints.forEach(bp => {
+      const isSmall = bp === 'sm';
+      const colWidth = isSmall ? 6 : 6;
+
+      const bpLayout = reports.map((report, index) => ({
+        i: `report-${report.id}`, // Stable key
+        x: isSmall ? 0 : (index % 2) * 6, // 0 or 6
+        y: isSmall ? index * 2 : Math.floor(index / 2) * 2, // Fixed: 2 units per row
+        w: colWidth,
+        h: 2, // Fixed: 2 units height = 400px (was 4 = 800px)
+        minW: 4,
+        minH: 2, // Fixed: minimum 2 units (was 3)
+        static: false,
+      }));
+      newLayouts[bp] = bpLayout;
+    });
+
+    return newLayouts;
+  };
+
+  const [customReportsLayouts, setCustomReportsLayouts] = useState<{ [key: string]: any[] }>(() => {
+    try {
+      const saved = localStorage.getItem(CUSTOM_REPORTS_LAYOUT_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // If we have saved layouts, verify they might match, but since customReports might be empty initially 
+        // until useEffect loads them, this check is loose. 
+        // However, we want to prioritize the "Latest First" structure.
+        // For now, let's return parsed if valid, but the Effect below will enforce consistency.
+        return parsed;
+      }
+    } catch (error) {
+      console.error("Error loading custom reports layout:", error);
+    }
+
+    // Default to empty or recalculated based on initial customReports (likely empty array)
+    return recalculateLayouts([]);
+  });
+
+  const handleCustomReportsLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
+    setCustomReportsLayouts(allLayouts);
+    try {
+      localStorage.setItem(CUSTOM_REPORTS_LAYOUT_KEY, JSON.stringify(allLayouts));
+    } catch (error) {
+      console.error("Error saving custom reports layout:", error);
+    }
+  }, []);
+
+  const resetCustomLayouts = useCallback(() => {
+    // Force regeneration based on current reports list
+    const newLayouts = recalculateLayouts(customReports);
+
+    // Wrap layout update in startTransition for smooth reset
+    startTransition(() => {
+      setCustomReportsLayouts(newLayouts);
+      localStorage.setItem(CUSTOM_REPORTS_LAYOUT_KEY, JSON.stringify(newLayouts));
+    });
+
+    toast({
+      title: "Layout Reset",
+      description: "Custom reports layout has been reset",
+    });
+  }, [customReports, toast]);
+
   // Navigation sections
   const navSections: NavSection[] = [
     { id: "overview", name: "Overview", icon: <BarChart3 className="w-4 h-4" /> },
@@ -184,7 +257,16 @@ export default function Reports() {
     try {
       const saved = localStorage.getItem('hse_custom_reports');
       if (saved) {
-        setCustomReports(JSON.parse(saved));
+        const loadedReports = JSON.parse(saved);
+        setCustomReports(loadedReports);
+        // After loading reports, ensure layouts are synced
+        const savedLayouts = localStorage.getItem(CUSTOM_REPORTS_LAYOUT_KEY);
+        if (!savedLayouts || !JSON.parse(savedLayouts).lg || JSON.parse(savedLayouts).lg.length !== loadedReports.length) {
+          // If no saved layout or layout count mismatch, regenerate
+          setCustomReportsLayouts(recalculateLayouts(loadedReports));
+        } else {
+          setCustomReportsLayouts(JSON.parse(savedLayouts));
+        }
       }
     } catch (error) {
       console.error('Error loading custom reports:', error);
@@ -752,21 +834,35 @@ export default function Reports() {
       // Update existing
       updatedReports = [...customReports];
       updatedReports[existingIndex] = config;
+      // Layout doesn't need to change for edits
+      setCustomReports(updatedReports);
+      saveCustomReports(updatedReports);
+
       toast({
         title: "Report Updated",
         description: `"${config.title}" has been updated`,
       });
     } else {
-      // Add new
-      updatedReports = [...customReports, config];
+      // Add new - INSERT AT BEGINNING (Latest First)
+      updatedReports = [config, ...customReports];
+
+      // Update data immediately
+      setCustomReports(updatedReports);
+      saveCustomReports(updatedReports);
+
+      // Wrap layout calculation in startTransition for smoother rendering
+      startTransition(() => {
+        const newLayouts = recalculateLayouts(updatedReports);
+        setCustomReportsLayouts(newLayouts);
+        localStorage.setItem(CUSTOM_REPORTS_LAYOUT_KEY, JSON.stringify(newLayouts));
+      });
+
       toast({
         title: "Report Created",
         description: `"${config.title}" has been added to your dashboard`,
       });
     }
 
-    setCustomReports(updatedReports); // Update state FIRST for immediate UI refresh
-    saveCustomReports(updatedReports); // Then save to localStorage
     setIsBuilderOpen(false);
     setSelectedReport(null);
   };
@@ -781,16 +877,27 @@ export default function Reports() {
       ...config,
       id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
       title: `${config.title} (Copy)`,
-      data: config.data ? [...config.data] : [], // Deep copy the data array
+      data: config.data ? [...config.data] : [],
     };
-    const updatedReports = [...customReports, duplicate];
-    setCustomReports(updatedReports); // Update state FIRST for immediate UI refresh
-    saveCustomReports(updatedReports); // Then persist to localStorage
+
+    // Add Duplicate to BEGINNING (Latest First)
+    const updatedReports = [duplicate, ...customReports];
+
+    // Update data immediately
+    setCustomReports(updatedReports);
+    saveCustomReports(updatedReports);
+
+    // Wrap layout calculation in startTransition for smoother rendering
+    startTransition(() => {
+      const newLayouts = recalculateLayouts(updatedReports);
+      setCustomReportsLayouts(newLayouts);
+      localStorage.setItem(CUSTOM_REPORTS_LAYOUT_KEY, JSON.stringify(newLayouts));
+    });
+
     toast({
       title: "Report Duplicated",
       description: `Created a copy of "${config.title}"`,
     });
-    // NOTE: Do NOT open builder - just create the copy silently
   };
 
   const handleDeleteReport = (id: string) => {
@@ -805,7 +912,18 @@ export default function Reports() {
     if (!reportToDelete) return;
 
     const updatedReports = customReports.filter(r => r.id !== reportToDelete.id);
+
+    // Update data immediately
+    setCustomReports(updatedReports);
     saveCustomReports(updatedReports);
+
+    // Wrap layout recalculation in startTransition
+    startTransition(() => {
+      const newLayouts = recalculateLayouts(updatedReports);
+      setCustomReportsLayouts(newLayouts);
+      localStorage.setItem(CUSTOM_REPORTS_LAYOUT_KEY, JSON.stringify(newLayouts));
+    });
+
     toast({
       title: "Report Deleted",
       description: `"${reportToDelete.title}" has been removed`,
@@ -925,6 +1043,9 @@ export default function Reports() {
               stats={stats}
               chartData={chartData}
               customReports={customReports}
+              customReportsLayouts={customReportsLayouts}
+              onCustomReportsLayoutChange={handleCustomReportsLayoutChange}
+              onResetCustomLayouts={resetCustomLayouts}
               onEditReport={handleEditReport}
               onDuplicateReport={handleDuplicateReport}
               onDeleteReport={handleDeleteReport}
@@ -1074,6 +1195,9 @@ function OverviewSection({
   stats,
   chartData,
   customReports,
+  customReportsLayouts,
+  onCustomReportsLayoutChange,
+  onResetCustomLayouts,
   onEditReport,
   onDuplicateReport,
   onDeleteReport,
@@ -1083,6 +1207,9 @@ function OverviewSection({
   stats: ReportStats;
   chartData: any[];
   customReports: ReportConfig[];
+  customReportsLayouts: { [key: string]: any[] };
+  onCustomReportsLayoutChange: (currentLayout: any[], allLayouts: { [key: string]: any[] }) => void;
+  onResetCustomLayouts: () => void;
   onEditReport: (config: ReportConfig) => void;
   onDuplicateReport: (config: ReportConfig) => void;
   onDeleteReport: (id: string) => void;
@@ -1090,7 +1217,7 @@ function OverviewSection({
   onViewReport: (config: ReportConfig) => void;
 }) {
   const { toast } = useToast();
-  // Load layouts from localStorage or use defaults
+  // Load layouts from localStorage or use defaults (MAIN DASHBOARD ONLY)
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
     try {
       const saved = localStorage.getItem(LAYOUT_STORAGE_KEY);
@@ -1103,42 +1230,6 @@ function OverviewSection({
     return defaultLayouts;
   });
 
-  // Load custom reports layouts from localStorage
-  const [customReportsLayouts, setCustomReportsLayouts] = useState<{ [key: string]: any[] }>(() => {
-    try {
-      const saved = localStorage.getItem(CUSTOM_REPORTS_LAYOUT_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        // Validate that layout items match current reports (by ID)
-        const layoutKeys = new Set(parsed.lg?.map((item: any) => item.i) || []);
-        const reportKeys = new Set(customReports.map(r => `report-${r.id}`));
-
-        // If layouts don't match reports, regenerate
-        if (layoutKeys.size === reportKeys.size &&
-          [...reportKeys].every(key => layoutKeys.has(key))) {
-          return parsed;
-        }
-      }
-    } catch (error) {
-      console.error("Error loading custom reports layout:", error);
-    }
-    // Generate layout using report IDs
-    const layouts: any[] = [];
-    customReports.forEach((report, index) => {
-      layouts.push({
-        i: `report-${report.id}`,
-        x: (index % 2) * 6,
-        y: Math.floor(index / 2) * 4,
-        w: 6,
-        h: 4,
-        minW: 4,
-        minH: 3,
-        static: false,
-      });
-    });
-    return { lg: layouts, md: layouts, sm: layouts };
-  });
-
   // Save layouts to localStorage when they change
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
     setLayouts(allLayouts);
@@ -1149,111 +1240,21 @@ function OverviewSection({
     }
   }, []);
 
-  const handleCustomReportsLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
-    setCustomReportsLayouts(allLayouts);
-    try {
-      localStorage.setItem(CUSTOM_REPORTS_LAYOUT_KEY, JSON.stringify(allLayouts));
-    } catch (error) {
-      console.error("Error saving custom reports layout:", error);
-    }
-  }, []);
-
-  // Reset layout to 2-column default
+  // Reset layout to default
   const resetLayout = useCallback(() => {
     // Reset main dashboard layout
     const defaultResetLayouts = { lg: defaultLayouts.lg, md: defaultLayouts.md, sm: defaultLayouts.sm };
     setLayouts(defaultResetLayouts);
     localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(defaultResetLayouts));
 
-    // Reset custom reports to 2-column layout
-    const customResetLayouts: any = { lg: [], md: [], sm: [] };
-    const breakpoints = ['lg', 'md', 'sm'];
-
-    // Simple 2-column layout: w=1 means 50% width when cols=2
-    breakpoints.forEach(bp => {
-      const cols = bp === 'sm' ? 1 : 2; // 1 column on small screens, 2 on larger
-      customResetLayouts[bp] = customReports.map((report, index) => ({
-        i: `report-${report.id}`,
-        x: cols === 1 ? 0 : (index % 2),  // 2 columns or 1 column
-        y: cols === 1 ? index : Math.floor(index / 2),  // Stack vertically
-        w: 1,  // Each card takes 1 column (50% when cols=2, 100% when cols=1)
-        h: 1,  // 1 row unit = 200px (based on rowHeight)
-        minW: 1,
-        minH: 1,
-        static: false,
-      }));
-    });
-
-    setCustomReportsLayouts(customResetLayouts);
-    localStorage.setItem(CUSTOM_REPORTS_LAYOUT_KEY, JSON.stringify(customResetLayouts));
+    // Reset Custom Layouts via prop
+    onResetCustomLayouts();
 
     toast({
       title: "Layout Reset",
-      description: "Dashboard layout has been reset to default 2-column view",
+      description: "Dashboard layout has been reset to default view",
     });
-  }, [customReports, toast]);
-
-
-
-  // Sync custom reports layout when reports change (add/remove/duplicate)
-  useEffect(() => {
-    // Use a ref to prevent unnecessary recalculations
-    const reportIds = customReports.map(r => r.id).join(',');
-
-    setCustomReportsLayouts(currentLayouts => {
-      const newLayouts = { ...currentLayouts };
-      const breakpoints = ['lg', 'md', 'sm'];
-      let hasChanges = false;
-
-      // Simple 2-column layout: w=1 means 50% width when cols=2
-      breakpoints.forEach(bp => {
-        const bpLayout = [...(newLayouts[bp] || [])];
-        const cols = bp === 'sm' ? 1 : 2; // 1 column on small screens, 2 on larger
-
-        // Get existing layout item keys
-        const existingKeys = new Set(bpLayout.map(item => item.i));
-
-        // Add layout items for new reports
-        customReports.forEach((report, index) => {
-          const key = `report-${report.id}`;
-          if (!existingKeys.has(key)) {
-            hasChanges = true;
-            bpLayout.push({
-              i: key,
-              x: cols === 1 ? 0 : (index % 2),  // 2 columns or 1 column
-              y: cols === 1 ? index : Math.floor(index / 2),  // Stack vertically
-              w: 1,  // 1 column width
-              h: 1,  // 1 row height
-              minW: 1,
-              minH: 1,
-              static: false,
-            });
-          }
-        });
-
-        // Remove layout items for deleted reports
-        const reportKeys = new Set(customReports.map(r => `report-${r.id}`));
-        const filteredLayout = bpLayout.filter(item => reportKeys.has(item.i));
-
-        if (filteredLayout.length !== bpLayout.length) {
-          hasChanges = true;
-        }
-
-        newLayouts[bp] = filteredLayout;
-      });
-
-      if (!hasChanges) return currentLayouts;
-
-      // Save new state
-      try {
-        localStorage.setItem(CUSTOM_REPORTS_LAYOUT_KEY, JSON.stringify(newLayouts));
-      } catch (e) {
-        console.error("Error saving updated custom layout:", e);
-      }
-
-      return newLayouts;
-    });
-  }, [customReports.map(r => r.id).join(',')]); // Use stable string dependency
+  }, [onResetCustomLayouts, toast]);
 
   return (
     <div className="space-y-8">
@@ -1434,15 +1435,16 @@ function OverviewSection({
           className="layout mt-8"
           layouts={customReportsLayouts}
           breakpoints={{ lg: 1200, md: 996, sm: 768 }}
-          cols={{ lg: 2, md: 2, sm: 1 }}
+          cols={{ lg: 12, md: 10, sm: 6 }}
           rowHeight={200}
-          onLayoutChange={handleCustomReportsLayoutChange}
+          onLayoutChange={onCustomReportsLayoutChange}
           draggableHandle=".drag-handle"
           isResizable={true}
           isDraggable={true}
           margin={[16, 16]}
           containerPadding={[0, 0]}
           compactType="vertical"
+          preventCollision={false}
           useCSSTransforms={false}
         >
           {customReports.map((report) => (
@@ -1538,9 +1540,9 @@ function DraggableGridSection({
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
+
         <div>
-          <h2 className="text-2xl font-bold mb-2">{title}</h2>
-          <p className="text-muted-foreground">{description}</p>
+          {/* Title and description removed per user request */}
         </div>
         <Button variant="outline" size="sm" onClick={onResetLayout}>
           <RotateCcw className="w-4 h-4 mr-2" />
