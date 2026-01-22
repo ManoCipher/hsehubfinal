@@ -65,6 +65,7 @@ import {
   Save,
 } from "lucide-react";
 import { RefreshAuthButton } from "@/components/RefreshAuthButton";
+import { useAuditLog } from "@/hooks/useAuditLog";
 
 interface Employee {
   id: string;
@@ -82,6 +83,7 @@ interface Employee {
 export default function Employees() {
   const { companyId, userRole, loading, user } = useAuth();
   const { t } = useLanguage();
+  const { logAction } = useAuditLog();
   const navigate = useNavigate();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -229,7 +231,7 @@ export default function Employees() {
         exposure_group_id: null,
         is_active: true,
         company_id: companyId,
-      } as any);
+      } as any).select().single();
 
       if (error) {
         const details =
@@ -239,6 +241,19 @@ export default function Employees() {
         console.error("Add employee error:", error);
         return;
       }
+
+      // Create audit log
+      logAction({
+        action: "create_employee",
+        targetType: "employee",
+        targetId: (data as any)?.id,
+        targetName: fullName,
+        details: {
+          employee_number: formData.employee_number,
+          department_id: formData.department_id,
+          job_role_id: formData.job_role_id
+        }
+      });
 
       toast.success(t("employees.addSuccess"));
       setIsDialogOpen(false);
@@ -365,6 +380,18 @@ export default function Employees() {
         toast.success(
           `Task assigned to ${mentionedEmployees.length} employee(s)`
         );
+
+        // Create audit log for valid tasks
+        createdTasks.forEach((task) => {
+          const assignee = mentionedEmployees.find(e => e.id === task.assigned_to);
+          logAction({
+            action: "assign_task",
+            targetType: "task",
+            targetId: task.id,
+            targetName: task.title,
+            details: { assignee_name: assignee?.full_name, priority: task.priority }
+          });
+        });
       }
     } catch (error) {
       console.error("Error creating task:", error);
@@ -388,6 +415,15 @@ export default function Employees() {
         )
       );
       toast.success(`Task marked as ${newStatus}`);
+
+      // Create audit log
+      logAction({
+        action: newStatus === "completed" ? "complete_task" : "reopen_task",
+        targetType: "task",
+        targetId: task.id,
+        targetName: task.title,
+        details: { previous_status: task.status, new_status: newStatus }
+      });
     } catch (error) {
       console.error("Error updating task:", error);
       toast.error("Failed to update task");
@@ -483,6 +519,17 @@ export default function Employees() {
         setNewNote("");
         setShowMentionDropdown(false);
         toast.success(`Note added to ${mentionedEmployees.length} employee(s)`);
+
+        // Create audit log
+        mentionedEmployees.forEach((emp) => {
+          logAction({
+            action: "add_employee_note",
+            targetType: "employee",
+            targetId: emp.id,
+            targetName: emp.full_name,
+            details: { note_content: cleanNoteContent.substring(0, 50) + "..." }
+          });
+        });
       }
     } catch (error) {
       console.error("Error saving note:", error);
@@ -506,6 +553,15 @@ export default function Employees() {
 
       setEmployeeNotes(updatedNotes);
       toast.success("Note deleted successfully");
+
+      // Create audit log
+      logAction({
+        action: "delete_employee_note",
+        targetType: "employee",
+        targetId: selectedEmployeeForAction.id,
+        targetName: selectedEmployeeForAction.full_name,
+        details: { note_id: noteId }
+      });
     } catch (error) {
       console.error("Error deleting note:", error);
       toast.error("Failed to delete note");
@@ -585,6 +641,19 @@ export default function Employees() {
         .in("id", Array.from(selectedEmployees));
 
       if (error) throw error;
+
+      // Create audit logs for deleted employees
+      const deletedIds = Array.from(selectedEmployees);
+      deletedIds.forEach((id) => {
+        const emp = employees.find(e => e.id === id);
+        logAction({
+          action: "delete_employee",
+          targetType: "employee",
+          targetId: id,
+          targetName: emp?.full_name || "Unknown Employee",
+          details: { employee_number: emp?.employee_number }
+        });
+      });
 
       toast.success(`Successfully deleted ${selectedEmployees.size} employee(s)`);
       setSelectedEmployees(new Set());

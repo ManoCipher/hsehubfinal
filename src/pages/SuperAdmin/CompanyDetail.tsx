@@ -312,9 +312,11 @@ export default function CompanyDetail() {
             .from("audit_logs")
             .select("*")
             .eq("company_id", id)
-            .neq("actor_role", "super_admin") // Filter out super admin actions for company activity view
+            .neq("actor_role", "super_admin") // Filter out super admin actions
+            .neq("actor_role", "system") // Filter out system actions (often super admin)
+            .not("action_type", "in", '("block_company","unblock_company","extend_trial","invoice_correction","assign_addon")') // Explicitly filter out SA actions
             .order("created_at", { ascending: false })
-            .limit(20);
+            .limit(50); // Increased limit to 50 for better visibility
 
         // Additionally filter out actions by the current super admin user if user context is available
         if (user?.id) {
@@ -322,6 +324,8 @@ export default function CompanyDetail() {
         }
 
         const { data, error } = await query;
+
+        console.log("Raw Audit Logs for debugging:", data); // Debug log
 
         if (error) {
             console.error("Audit logs logs error:", error);
@@ -1358,12 +1362,28 @@ export default function CompanyDetail() {
                                                 </TableCell>
                                                 <TableCell>{log.actor_email || "System"}</TableCell>
                                                 <TableCell>{log.target_name || log.target_type || "-"}</TableCell>
-                                                <TableCell className="max-w-xs truncate">
-                                                    {log.details ? (
-                                                        typeof log.details === "object"
-                                                            ? Object.entries(log.details).slice(0, 2).map(([k, v]) => `${k}: ${v}`).join(", ")
-                                                            : String(log.details)
-                                                    ) : "-"}
+                                                <TableCell className="max-w-[250px]">
+                                                    {log.details && typeof log.details === 'object' ? (
+                                                        <div className="flex flex-col gap-1 text-xs">
+                                                            {Object.entries(log.details).slice(0, 3).map(([key, value]) => (
+                                                                <div key={key} className="flex items-start gap-1">
+                                                                    <span className="font-medium capitalize text-muted-foreground shrink-0">
+                                                                        {key.replace(/_/g, " ")}:
+                                                                    </span>
+                                                                    <span className="truncate text-foreground" title={String(value)}>
+                                                                        {String(value)}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                            {Object.keys(log.details).length > 3 && (
+                                                                <span className="text-[10px] text-muted-foreground italic">
+                                                                    +{Object.keys(log.details).length - 3} more...
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-muted-foreground text-sm">-</span>
+                                                    )}
                                                 </TableCell>
                                                 <TableCell className="whitespace-nowrap">
                                                     {new Date(log.created_at).toLocaleString()}

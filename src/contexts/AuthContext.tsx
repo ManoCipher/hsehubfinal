@@ -160,6 +160,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setLoading(false);
+
+    // Update last login
+    updateLastLogin(userId, bestCompanyId);
   };
 
   const fetchCompanyContextViaRpc = async () => {
@@ -168,7 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       if (isMissingRpcError(error)) {
         console.warn("[AuthContext] get_company_context RPC missing, using fallback");
-        return false;
+        return { success: false };
       }
       console.error("[AuthContext] Error fetching company context via RPC:", error);
       throw error;
@@ -194,13 +197,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setLoading(false);
-      return true;
+
+      // Update last login
+      // We need the userId here. Let's rely on the caller or just get it from session if available?
+      // Better to pass userId as arg to this function.
+      return { success: true, companyId: data.company_id };
     }
 
-    return false;
+    return { success: false };
   };
 
-  const updateLastLogin = async (userId: string) => {
+  const updateLastLogin = async (userId: string, companyId: string | null = null) => {
     try {
       // Update last login timestamp
       await supabase
@@ -221,7 +228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             timestamp: new Date().toISOString(),
             user_agent: navigator.userAgent,
           },
-          p_company_id: null,
+          p_company_id: companyId,
         });
         console.log("[AuthContext] Created audit log for login");
       } catch (auditError) {
@@ -238,16 +245,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log(`[AuthContext] Fetching user role for ${userId}, attempt ${retryCount + 1}`);
 
-      const rpcHandled = await fetchCompanyContextViaRpc();
-      if (rpcHandled) {
+      const rpcResult = await fetchCompanyContextViaRpc();
+      if (rpcResult.success) {
         // Update last login after successful role fetch
-        await updateLastLogin(userId);
+        await updateLastLogin(userId, rpcResult.companyId);
         return;
       }
 
       await fetchCompanyContextViaTables(userId);
-      // Update last login after successful role fetch
-      await updateLastLogin(userId);
+      // updateLastLogin is called inside fetchCompanyContextViaTables now
     } catch (error) {
       console.error("[AuthContext] Error fetching user role:", error);
       if (retryCount < 3) {

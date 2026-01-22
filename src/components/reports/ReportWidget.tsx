@@ -1,5 +1,11 @@
-import { useState } from "react";
-import { MoreVertical, Edit, Copy, Trash2, Download, GripVertical } from "lucide-react";
+import {
+  MoreVertical,
+  Edit,
+  Copy,
+  Trash2,
+  Download,
+  GripVertical
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,13 +15,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
   PieChart as RechartsPie,
   Pie,
   Cell,
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -34,7 +40,33 @@ interface ReportWidgetProps {
   onExport: (config: ReportConfig) => void;
 }
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82ca9d'];
+const COLORS = ['#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#6366f1'];
+
+// Get subtitle based on report configuration
+const getSubtitle = (config: ReportConfig) => {
+  if (config.metric === 'incidents') {
+    return config.incidentType
+      ? `${config.incidentType} incidents over time`
+      : 'Monthly incident reports over the last 6 months';
+  }
+  if (config.metric === 'audits') {
+    return config.auditTemplate
+      ? `${config.auditTemplate} audits`
+      : 'Audit completion status';
+  }
+  if (config.metric === 'trainings') {
+    return 'Training completion by status';
+  }
+  if (config.metric === 'employees') {
+    return config.groupBy
+      ? `Employees by ${config.groupBy}`
+      : 'Employee distribution';
+  }
+  if (config.groupBy) {
+    return `Grouped by ${config.groupBy}`;
+  }
+  return 'Report data overview';
+};
 
 export default function ReportWidget({
   config,
@@ -44,35 +76,109 @@ export default function ReportWidget({
   onDelete,
   onExport,
 }: ReportWidgetProps) {
-  // Generate sample/mock data if none provided
+  // Use provided data or config data
   const chartData = (data && data.length > 0) ? data : (config.data || []);
-  const hasData = chartData && chartData.length > 0;
+
+  // Check if there's actual data (non-zero totals) and not just empty categories
+  const hasData = chartData && chartData.length > 0 && chartData.some(d => d.value > 0);
+  const subtitle = getSubtitle(config);
 
   const renderChart = () => {
-    const height = "100%";
-
     if (!hasData) {
       return (
-        <div className="flex flex-col items-center justify-center p-6 text-muted-foreground border-2 border-dashed rounded-lg h-full min-h-[200px]">
-          <GripVertical className="w-8 h-8 mb-2 opacity-20" />
-          <p className="text-sm">No data available</p>
+        <div className="flex-1 flex items-center justify-center text-muted-foreground min-h-[150px]">
+          <div className="text-center">
+            <BarChart className="w-8 h-8 mx-auto mb-2 opacity-20" />
+            <p className="text-sm">No data available</p>
+          </div>
         </div>
       );
     }
 
     switch (config.chartType) {
+      case 'line':
+        // Area chart like Incident Trends
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id={`gradient-${config.id}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 11, fill: '#9ca3af' }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: '#9ca3af' }}
+                tickLine={false}
+                axisLine={false}
+                width={30}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'white',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                }}
+              />
+              <Area
+                type="monotone"
+                dataKey="value"
+                stroke="#8b5cf6"
+                strokeWidth={2}
+                fill={`url(#gradient-${config.id})`}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        );
+
+      case 'bar':
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 11, fill: '#9ca3af' }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: '#9ca3af' }}
+                tickLine={false}
+                axisLine={false}
+                width={30}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'white',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px'
+                }}
+              />
+              <Bar dataKey="value" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        );
+
       case 'pie':
         return (
-          <ResponsiveContainer width="100%" height={height}>
-            <RechartsPie margin={{ top: 20, right: 30, left: 30, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <RechartsPie margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
               <Pie
                 data={chartData}
                 cx="50%"
                 cy="50%"
-                labelLine={true}
-                label={({ name, value }) => `${name}: ${value}`}
-                outerRadius="50%"
-                fill="#8884d8"
+                innerRadius="40%"
+                outerRadius="70%"
+                paddingAngle={2}
                 dataKey="value"
               >
                 {chartData.map((entry, index) => (
@@ -80,101 +186,105 @@ export default function ReportWidget({
                 ))}
               </Pie>
               <Tooltip />
-              <Legend verticalAlign="bottom" height={36} />
+              <Legend
+                verticalAlign="bottom"
+                height={36}
+                iconSize={10}
+                wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}
+              />
             </RechartsPie>
           </ResponsiveContainer>
         );
 
-      case 'bar':
+      default:
+        // Default to area chart
         return (
-          <ResponsiveContainer width="100%" height={height}>
-            <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id={`gradient-default-${config.id}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
               <XAxis
                 dataKey="name"
-                tick={{ fontSize: 10, angle: -45, textAnchor: 'end' } as any}
+                tick={{ fontSize: 11, fill: '#9ca3af' }}
                 tickLine={false}
                 axisLine={false}
-                interval={0}
-                height={60}
               />
               <YAxis
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 11, fill: '#9ca3af' }}
                 tickLine={false}
                 axisLine={false}
-              />
-              <Tooltip cursor={{ fill: 'transparent' }} />
-              <Legend verticalAlign="top" align="right" height={36} iconType="circle" />
-              <Bar dataKey="value" fill="#0088FE" radius={[4, 4, 0, 0]} barSize={40} />
-            </BarChart>
-          </ResponsiveContainer>
-        );
-
-      case 'line':
-        return (
-          <ResponsiveContainer width="100%" height={height}>
-            <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="name"
-                tick={{ fontSize: 10, angle: -45, textAnchor: 'end' } as any}
-                tickLine={false}
-                axisLine={false}
-                height={60}
-              />
-              <YAxis
-                tick={{ fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
+                width={30}
               />
               <Tooltip />
-              <Legend verticalAlign="top" align="right" height={36} iconType="circle" />
-              <Line type="monotone" dataKey="value" stroke="#8884d8" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-            </LineChart>
+              <Area
+                type="monotone"
+                dataKey="value"
+                stroke="#8b5cf6"
+                strokeWidth={2}
+                fill={`url(#gradient-default-${config.id})`}
+              />
+            </AreaChart>
           </ResponsiveContainer>
         );
     }
   };
 
   return (
-    <Card className="dashboard-grid-card hover:shadow-lg transition-shadow h-full flex flex-col overflow-hidden">
-      <div className="drag-handle border-b cursor-move hover:bg-muted/50 transition-colors p-1 flex items-center justify-center bg-muted/10 h-4">
-        <GripVertical className="w-3 h-3 text-muted-foreground/30" />
+    <Card className="h-full flex flex-col overflow-hidden border rounded-xl hover:shadow-md transition-shadow">
+      {/* Drag Handle */}
+      <div className="drag-handle cursor-grab active:cursor-grabbing flex items-center justify-center py-2 border-b hover:bg-muted/30 transition-colors">
+        <GripVertical className="w-4 h-4 text-muted-foreground/40" />
       </div>
 
-      <CardHeader className="p-3 pb-0 flex-row items-center justify-between space-y-0 gap-2 shrink-0">
-        <div className="min-w-0 flex-1">
-          <CardTitle className="text-sm font-semibold truncate leading-tight" title={config.title}>
+      {/* Header */}
+      <CardHeader className="px-4 py-3 flex-row items-start justify-between space-y-0">
+        <div className="flex-1 min-w-0">
+          <CardTitle className="text-base font-semibold text-foreground">
             {config.title}
           </CardTitle>
-          <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-            {config.metric === 'incidents' ? `Type: ${config.incidentType || 'All'}` :
-              config.metric === 'audits' ? `Template: ${config.auditTemplate || 'All'}` :
-                `Group: ${config.groupBy}`}
+          <p className="text-sm text-muted-foreground mt-1">
+            {subtitle}
           </p>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-6 w-6 p-0 shrink-0">
-              <MoreVertical className="h-3 w-3" />
+            <Button variant="ghost" className="h-8 w-8 p-0 shrink-0">
+              <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onEdit(config)}>
+            <DropdownMenuItem onClick={(e) => {
+              e.stopPropagation();
+              onEdit(config);
+            }}>
               <Edit className="mr-2 h-4 w-4" />
               Edit Report
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onDuplicate(config)}>
+            <DropdownMenuItem onClick={(e) => {
+              e.stopPropagation();
+              onDuplicate(config);
+            }}>
               <Copy className="mr-2 h-4 w-4" />
               Duplicate
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onExport(config)}>
+            <DropdownMenuItem onClick={(e) => {
+              e.stopPropagation();
+              onExport(config);
+            }}>
               <Download className="mr-2 h-4 w-4" />
               Export Data
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
-              onClick={() => onDelete(config.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(config.id);
+              }}
             >
               <Trash2 className="mr-2 h-4 w-4" />
               Delete
@@ -183,13 +293,9 @@ export default function ReportWidget({
         </DropdownMenu>
       </CardHeader>
 
-      <CardContent className="flex-1 p-2 pb-3 min-h-[150px] flex flex-col">
-        <div className="flex-1 w-full min-h-0">
-          {renderChart()}
-        </div>
-        <div className="mt-2 text-[10px] text-muted-foreground text-center border-t pt-2">
-          Total: {chartData.reduce((sum, d) => sum + d.value, 0)}
-        </div>
+      {/* Chart Content */}
+      <CardContent className="flex-1 px-4 pb-4 min-h-[120px]">
+        {renderChart()}
       </CardContent>
     </Card>
   );

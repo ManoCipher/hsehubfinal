@@ -28,7 +28,6 @@ const REPORT_TEMPLATES = [
         chartType: "pie" as const,
         description: "See where your workforce is located",
       },
-
     ],
   },
   {
@@ -92,7 +91,7 @@ const REPORT_TEMPLATES = [
       {
         title: "Training Compliance by Employee",
         metric: "trainings",
-        groupBy: "assigned_to",
+        groupBy: "employee_id",
         chartType: "bar" as const,
         description: "Individual training completion rates",
       },
@@ -243,9 +242,7 @@ export default function ReportLibrary({
                         {report.description}
                       </p>
                       <div className="flex items-center gap-2 text-xs">
-                        <span className="px-2 py-1 bg-primary/10 text-primary rounded">
-                          {report.chartType.charAt(0).toUpperCase() + report.chartType.slice(1)} Chart
-                        </span>
+
                         <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded">
                           Last 30 days
                         </span>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useNavigate } from "react-router-dom";
+import { useAuditLog } from "@/hooks/useAuditLog";
 import {
   ArrowLeft,
   Plus,
@@ -111,6 +112,7 @@ export default function Settings() {
   const { t, language } = useLanguage();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { logAction } = useAuditLog();
   const [loadingData, setLoadingData] = useState(false);
   const [activeTab, setActiveTab] = useState("company");
   const [expandedQuestions, setExpandedQuestions] = useState<Set<string>>(new Set());
@@ -825,6 +827,15 @@ export default function Settings() {
       );
 
       if (error) throw error;
+
+      // Create audit log
+      logAction({
+        action: isCustom ? "update_custom_iso" : "activate_iso_standard",
+        targetType: "iso_standard",
+        targetId: isoCode,
+        targetName: isoName,
+        details: { iso_code: isoCode, is_active: true }
+      });
     } catch (err: any) {
       toast({
         title: "Error",
@@ -845,6 +856,16 @@ export default function Settings() {
         .eq("iso_code", isoCode);
 
       if (error) throw error;
+
+      // Create audit log
+      logAction({
+        action: "deactivate_iso_standard",
+        targetType: "iso_standard",
+        targetId: isoCode,
+        targetName: isoCode,
+        details: { iso_code: isoCode }
+      });
+
     } catch (err: any) {
       toast({
         title: "Error",
@@ -892,6 +913,16 @@ export default function Settings() {
       toast({
         title: "Success",
         description: "Team member added successfully",
+      });
+
+      // Create audit log
+      const newMember = (data as any)?.[0];
+      logAction({
+        action: "invite_team_member",
+        targetType: "team_member",
+        targetId: newMember?.id || "unknown",
+        targetName: `${teamMemberForm.firstName} ${teamMemberForm.lastName}`,
+        details: { email: teamMemberForm.email, role: teamMemberForm.role }
       });
 
       // Reset form
@@ -967,17 +998,38 @@ export default function Settings() {
 
         if (error) throw error;
         toast({ title: "Success", description: "Item updated successfully" });
+
+        // Create audit log
+        const itemType = tableName.endsWith('s') ? tableName.slice(0, -1) : tableName;
+        logAction({
+          action: `update_${itemType}`,
+          targetType: itemType,
+          targetId: editingItem.id,
+          targetName: formData.name || (formData as any).title || "Unknown Item",
+          details: { table: tableName, changes: payload }
+        });
       } else {
         // Create new item
-        const { error } = await (supabase as any).from(tableName).insert([
+        const { data: newItemData, error } = await (supabase as any).from(tableName).insert([
           {
             ...payload,
             company_id: companyId,
           },
-        ]);
+        ]).select(); // Added select to get ID
 
         if (error) throw error;
         toast({ title: "Success", description: "Item created successfully" });
+
+        // Create audit log
+        const itemType = tableName.endsWith('s') ? tableName.slice(0, -1) : tableName;
+        const createdItem = (newItemData as any)?.[0];
+        logAction({
+          action: `create_${itemType}`,
+          targetType: itemType,
+          targetId: createdItem?.id || "unknown",
+          targetName: formData.name || (formData as any).title || "Unknown Item",
+          details: { table: tableName, item: createdItem }
+        });
       }
 
       setIsDialogOpen(false);
@@ -1027,6 +1079,20 @@ export default function Settings() {
       if (error) throw error;
 
       toast({ title: "Success", description: "Item deleted successfully" });
+
+      // Create audit log
+      const itemType = tableName.endsWith('s') ? tableName.slice(0, -1) : tableName;
+      logAction({
+        action: `delete_${itemType}`,
+        targetType: itemType,
+        targetId: deleteItem.id,
+        targetName: deleteItem.name || deleteItem.title || "Unknown Item",
+        details: {
+          table: tableName,
+          deleted_item: deleteItem
+        }
+      });
+
       setDeleteItem(null);
       fetchAllData();
     } catch (err: unknown) {
