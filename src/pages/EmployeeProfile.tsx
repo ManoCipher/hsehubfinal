@@ -237,6 +237,7 @@ export default function EmployeeProfile() {
   // Profile field templates from settings
   const [profileFieldTemplates, setProfileFieldTemplates] = useState<any[]>([]);
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
 
   // Debounce timer ref for profile field updates
   const debounceTimerRef = useRef<{ [key: string]: NodeJS.Timeout }>({});
@@ -729,14 +730,19 @@ export default function EmployeeProfile() {
   };
 
   const applyTemplate = async () => {
-    if (profileFieldTemplates.length === 0) {
-      toast.error("No templates available from Settings");
+    if (selectedTemplateIds.length === 0) {
+      toast.error("Please select at least one template field to apply");
       return;
     }
 
     try {
-      // Convert all templates to profile fields format
-      const newFields = profileFieldTemplates.map((template) => ({
+      // Filter to only selected templates
+      const selectedTemplates = profileFieldTemplates.filter(template =>
+        selectedTemplateIds.includes(template.id)
+      );
+
+      // Convert selected templates to profile fields format
+      const newFields = selectedTemplates.map((template) => ({
         id: `${template.field_name}_${Date.now()}`,
         label: template.field_label,
         type: template.field_type === "text" ? "Single-line text" :
@@ -760,13 +766,14 @@ export default function EmployeeProfile() {
 
       setProfileFields(updatedFields);
       setShowTemplateDialog(false);
-      toast.success(`Applied ${newFields.length} profile fields from template`);
+      setSelectedTemplateIds([]); // Reset selection
+      toast.success(`Applied ${newFields.length} profile field${newFields.length !== 1 ? 's' : ''} from template`);
 
       await logActivity(
         "Applied profile field template",
         "create",
         `Added ${newFields.length} fields from Settings template`,
-        { fieldsAdded: newFields.length, templates: profileFieldTemplates.map(t => t.field_label) }
+        { fieldsAdded: newFields.length, templates: selectedTemplates.map(t => t.field_label) }
       );
       await fetchActivityLogs();
     } catch (error) {
@@ -2877,12 +2884,15 @@ export default function EmployeeProfile() {
                 </Card>
 
                 {/* Use Template Dialog */}
-                <Dialog open={showTemplateDialog} onOpenChange={setShowTemplateDialog}>
+                <Dialog open={showTemplateDialog} onOpenChange={(open) => {
+                  setShowTemplateDialog(open);
+                  if (!open) setSelectedTemplateIds([]); // Reset on close
+                }}>
                   <DialogContent className="sm:max-w-[600px]">
                     <DialogHeader>
                       <DialogTitle>Use Profile Field Template</DialogTitle>
                       <DialogDescription>
-                        Apply profile fields from Settings to this employee. All template fields will be added.
+                        Select which profile fields from Settings to apply to this employee.
                       </DialogDescription>
                     </DialogHeader>
                     <div className="py-4">
@@ -2894,32 +2904,67 @@ export default function EmployeeProfile() {
                         </div>
                       ) : (
                         <div className="space-y-4">
-                          <div className="text-sm text-muted-foreground mb-4">
-                            {profileFieldTemplates.length} field{profileFieldTemplates.length !== 1 ? 's' : ''} from Settings will be applied:
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm text-muted-foreground">
+                              {selectedTemplateIds.length} of {profileFieldTemplates.length} selected
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-xs h-7"
+                              onClick={() => {
+                                if (selectedTemplateIds.length === profileFieldTemplates.length) {
+                                  setSelectedTemplateIds([]);
+                                } else {
+                                  setSelectedTemplateIds(profileFieldTemplates.map(t => t.id));
+                                }
+                              }}
+                            >
+                              {selectedTemplateIds.length === profileFieldTemplates.length ? 'Deselect All' : 'Select All'}
+                            </Button>
                           </div>
                           <div className="max-h-[300px] overflow-y-auto space-y-2 border rounded-lg p-3 bg-muted/20">
-                            {profileFieldTemplates.map((template, index) => (
-                              <div
-                                key={template.id}
-                                className="flex items-center gap-3 p-2 bg-background border rounded text-sm"
-                              >
-                                <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-medium">
-                                  {index + 1}
-                                </div>
-                                <div className="flex-1">
-                                  <div className="font-medium">{template.field_label}</div>
-                                  <div className="text-xs text-muted-foreground flex items-center gap-2 mt-1">
-                                    <span className="capitalize">{template.field_type}</span>
-                                    {template.is_required && (
-                                      <span className="text-destructive">• Required</span>
-                                    )}
-                                    {template.extracted_from_resume && (
-                                      <span className="text-green-600">• Resume Extract</span>
-                                    )}
+                            {profileFieldTemplates.map((template, index) => {
+                              const isSelected = selectedTemplateIds.includes(template.id);
+                              return (
+                                <div
+                                  key={template.id}
+                                  className={`flex items-center gap-3 p-2 border rounded text-sm cursor-pointer transition-colors ${isSelected
+                                      ? 'bg-primary/10 border-primary'
+                                      : 'bg-background hover:bg-muted/50'
+                                    }`}
+                                  onClick={() => {
+                                    setSelectedTemplateIds(prev =>
+                                      prev.includes(template.id)
+                                        ? prev.filter(id => id !== template.id)
+                                        : [...prev, template.id]
+                                    );
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => { }}
+                                    className="w-4 h-4 cursor-pointer"
+                                  />
+                                  <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-medium">
+                                    {index + 1}
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="font-medium">{template.field_label}</div>
+                                    <div className="text-xs text-muted-foreground flex items-center gap-2 mt-1">
+                                      <span className="capitalize">{template.field_type}</span>
+                                      {template.is_required && (
+                                        <span className="text-destructive">• Required</span>
+                                      )}
+                                      {template.extracted_from_resume && (
+                                        <span className="text-green-600">• Resume Extract</span>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       )}
@@ -2927,16 +2972,19 @@ export default function EmployeeProfile() {
                     <DialogFooter>
                       <Button
                         variant="outline"
-                        onClick={() => setShowTemplateDialog(false)}
+                        onClick={() => {
+                          setShowTemplateDialog(false);
+                          setSelectedTemplateIds([]);
+                        }}
                       >
                         Cancel
                       </Button>
                       <Button
                         onClick={applyTemplate}
-                        disabled={profileFieldTemplates.length === 0}
+                        disabled={selectedTemplateIds.length === 0}
                       >
                         <CheckCircle className="w-4 h-4 mr-2" />
-                        Apply Template
+                        Apply {selectedTemplateIds.length > 0 ? `(${selectedTemplateIds.length})` : 'Template'}
                       </Button>
                     </DialogFooter>
                   </DialogContent>
