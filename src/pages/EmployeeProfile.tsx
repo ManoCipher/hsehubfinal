@@ -213,6 +213,13 @@ export default function EmployeeProfile() {
   const [notesMentionSearch, setNotesMentionSearch] = useState("");
   const [cursorPosition, setCursorPosition] = useState(0);
 
+  // Enhanced note visibility state
+  const [noteVisibilityMode, setNoteVisibilityMode] = useState<'everyone' | 'specific'>('everyone');
+  const [selectedVisibilityUsers, setSelectedVisibilityUsers] = useState<string[]>([]);
+
+  // Ref for notes textarea to handle formatting
+  const notesTextareaRef = useRef<HTMLTextAreaElement>(null);
+
   // Note reply state
   const [replyingToNoteId, setReplyingToNoteId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
@@ -1039,17 +1046,11 @@ export default function EmployeeProfile() {
         // If parsing fails, treat as empty
       }
 
-      // Get the SELECTED user's name from the dropdown (not the logged-in user)
+      // Use logged-in user as author (updated logic)
       let authorName = "Anonymous";
       let authorRole = "";
-
-      // Find the selected team member from the dropdown
-      const selectedMember = teamMembers.find((m) => m.id === selectedNoteVisibility);
-      if (selectedMember) {
-        authorName = `${selectedMember.first_name} ${selectedMember.last_name}`;
-        authorRole = selectedMember.role || "User";
-      } else if (userProfile) {
-        // Fallback to logged-in user if no selection
+      let authorId = user?.id || null;
+      if (userProfile) {
         if (userProfile.first_name && userProfile.last_name) {
           authorName = `${userProfile.first_name} ${userProfile.last_name}`;
         } else if (userProfile.full_name) {
@@ -1057,16 +1058,22 @@ export default function EmployeeProfile() {
         } else if (userProfile.email) {
           authorName = userProfile.email;
         }
+        authorRole = userProfile.role || "";
       }
+
+      // Determine visibility based on the new mode
+      const visibleTo = noteVisibilityMode === 'everyone'
+        ? 'everyone'
+        : selectedVisibilityUsers;
 
       const newNoteObj = {
         id: Date.now().toString(),
         content: notes,
         author: authorName,
-        author_role: authorRole, // Store the author's role
-        author_id: selectedNoteVisibility || user?.id || null, // Store selected user ID
+        author_role: authorRole,
+        author_id: authorId,
         date: new Date().toISOString(),
-        visibleTo: selectedNoteVisibility, // Keep visibility tracking
+        visibleTo: visibleTo, // 'everyone' or array of user IDs
         replies: [],
       };
 
@@ -1089,6 +1096,9 @@ export default function EmployeeProfile() {
       toast.success("Note added successfully");
       setNotes("");
       setShowNotesMentionDropdown(false);
+      // Reset visibility to 'everyone' after saving
+      setNoteVisibilityMode('everyone');
+      setSelectedVisibilityUsers([]);
       fetchEmployeeData();
     } catch (error) {
       console.error("Error saving notes:", error);
@@ -1345,6 +1355,56 @@ export default function EmployeeProfile() {
   const filteredNotesEmployees = employees.filter((emp) =>
     emp.full_name.toLowerCase().includes(notesMentionSearch.toLowerCase())
   );
+
+  // Rich text formatting functions
+  const applyFormatting = (formatType: 'bold' | 'italic' | 'underline' | 'list' | 'link') => {
+    const textarea = notesTextareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = notes.substring(start, end);
+    let newText = '';
+    let cursorOffset = 0;
+
+    switch (formatType) {
+      case 'bold':
+        newText = selectedText ? `**${selectedText}**` : '**bold text**';
+        cursorOffset = selectedText ? 2 : 2;
+        break;
+      case 'italic':
+        newText = selectedText ? `*${selectedText}*` : '*italic text*';
+        cursorOffset = selectedText ? 1 : 1;
+        break;
+      case 'underline':
+        newText = selectedText ? `<u>${selectedText}</u>` : '<u>underlined text</u>';
+        cursorOffset = selectedText ? 3 : 3;
+        break;
+      case 'list':
+        const lines = (selectedText || 'List item').split('\n');
+        newText = lines.map(line => line.trim() ? `- ${line}` : line).join('\n');
+        cursorOffset = 2;
+        break;
+      case 'link':
+        newText = selectedText ? `[${selectedText}](url)` : '[link text](url)';
+        cursorOffset = selectedText ? selectedText.length + 3 : 12;
+        break;
+    }
+
+    const before = notes.substring(0, start);
+    const after = notes.substring(end);
+    const updatedNotes = before + newText + after;
+
+    setNotes(updatedNotes);
+
+    setTimeout(() => {
+      if (textarea) {
+        const newCursorPos = start + (selectedText ? newText.length : cursorOffset);
+        textarea.focus();
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+      }
+    }, 0);
+  };
 
   const handleAddTag = async () => {
     if (!newTag.trim()) return;
@@ -2930,8 +2990,8 @@ export default function EmployeeProfile() {
                                 <div
                                   key={template.id}
                                   className={`flex items-center gap-3 p-2 border rounded text-sm cursor-pointer transition-colors ${isSelected
-                                      ? 'bg-primary/10 border-primary'
-                                      : 'bg-background hover:bg-muted/50'
+                                    ? 'bg-primary/10 border-primary'
+                                    : 'bg-background hover:bg-muted/50'
                                     }`}
                                   onClick={() => {
                                     setSelectedTemplateIds(prev =>
@@ -3294,6 +3354,7 @@ export default function EmployeeProfile() {
                               variant="ghost"
                               size="sm"
                               className="h-7 w-7 p-0"
+                              onClick={() => applyFormatting('bold')}
                             >
                               <Bold className="w-3.5 h-3.5" />
                             </Button>
@@ -3301,6 +3362,7 @@ export default function EmployeeProfile() {
                               variant="ghost"
                               size="sm"
                               className="h-7 w-7 p-0"
+                              onClick={() => applyFormatting('italic')}
                             >
                               <Italic className="w-3.5 h-3.5" />
                             </Button>
@@ -3308,6 +3370,7 @@ export default function EmployeeProfile() {
                               variant="ghost"
                               size="sm"
                               className="h-7 w-7 p-0"
+                              onClick={() => applyFormatting('underline')}
                             >
                               <Underline className="w-3.5 h-3.5" />
                             </Button>
@@ -3316,6 +3379,7 @@ export default function EmployeeProfile() {
                               variant="ghost"
                               size="sm"
                               className="h-7 w-7 p-0"
+                              onClick={() => applyFormatting('list')}
                             >
                               <List className="w-3.5 h-3.5" />
                             </Button>
@@ -3323,6 +3387,7 @@ export default function EmployeeProfile() {
                               variant="ghost"
                               size="sm"
                               className="h-7 w-7 p-0"
+                              onClick={() => applyFormatting('link')}
                             >
                               <Link className="w-3.5 h-3.5" />
                             </Button>
@@ -3354,6 +3419,7 @@ export default function EmployeeProfile() {
                           {/* Textarea */}
                           <div className="relative">
                             <Textarea
+                              ref={notesTextareaRef}
                               placeholder="Add a note..."
                               value={notes}
                               onChange={handleNotesChange}
@@ -3384,27 +3450,90 @@ export default function EmployeeProfile() {
                               )}
                           </div>
 
-                          {/* Visibility Dropdown */}
+                          {/* Enhanced Visibility Selector */}
                           <div className="flex items-center gap-2 pt-2">
                             <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-                            <Select
-                              value={selectedNoteVisibility}
-                              onValueChange={setSelectedNoteVisibility}
-                            >
-                              <SelectTrigger className="h-7 text-xs w-auto border-0 px-0 gap-1 hover:bg-transparent focus:ring-0">
-                                <SelectValue placeholder="Select user" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {teamMembers.map((member) => (
-                                  <SelectItem
-                                    key={member.id}
-                                    value={member.id}
+                            <div className="flex items-center gap-2">
+                              {/* Everyone Button */}
+                              <Button
+                                variant={noteVisibilityMode === 'everyone' ? 'default' : 'outline'}
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => {
+                                  setNoteVisibilityMode('everyone');
+                                  setSelectedVisibilityUsers([]);
+                                }}
+                              >
+                                Everyone
+                              </Button>
+
+                              {/* Specific Users Button */}
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant={noteVisibilityMode === 'specific' ? 'default' : 'outline'}
+                                    size="sm"
+                                    className="h-7 text-xs"
                                   >
-                                    {member.first_name} {member.last_name} ({member.role || "User"})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                                    Specific Users
+                                    {selectedVisibilityUsers.length > 0 && (
+                                      <Badge variant="secondary" className="ml-2 text-xs h-4 px-1">
+                                        {selectedVisibilityUsers.length}
+                                      </Badge>
+                                    )}
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-64 p-0" align="start">
+                                  <Card className="border-0 shadow-none">
+                                    <CardHeader className="p-3 pb-2">
+                                      <CardTitle className="text-sm">Select Users</CardTitle>
+                                      <CardDescription className="text-xs">
+                                        Choose who can see this note
+                                      </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="p-0">
+                                      <ScrollArea className="h-48">
+                                        <div className="p-2 space-y-1">
+                                          {teamMembers.map((member) => {
+                                            const isSelected = selectedVisibilityUsers.includes(member.id);
+                                            return (
+                                              <div
+                                                key={member.id}
+                                                className={`flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-muted ${isSelected ? 'bg-primary/10' : ''
+                                                  }`}
+                                                onClick={() => {
+                                                  setNoteVisibilityMode('specific');
+                                                  setSelectedVisibilityUsers(prev =>
+                                                    prev.includes(member.id)
+                                                      ? prev.filter(id => id !== member.id)
+                                                      : [...prev, member.id]
+                                                  );
+                                                }}
+                                              >
+                                                <input
+                                                  type="checkbox"
+                                                  checked={isSelected}
+                                                  onChange={() => { }}
+                                                  className="w-3.5 h-3.5 cursor-pointer"
+                                                />
+                                                <div className="flex-1 text-xs">
+                                                  <div className="font-medium">
+                                                    {member.first_name} {member.last_name}
+                                                  </div>
+                                                  <div className="text-muted-foreground text-xs">
+                                                    {member.role || 'User'}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </ScrollArea>
+                                    </CardContent>
+                                  </Card>
+                                </PopoverContent>
+                              </Popover>
+                            </div>
                           </div>
                         </div>
 
