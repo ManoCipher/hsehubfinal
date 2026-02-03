@@ -62,6 +62,42 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 
+const formatLogDescription = (log: any) => {
+    const action = log.action_type || "";
+    const details = log.details || {};
+    const target = log.target_name || log.target_type || "Unknown";
+
+    switch (action) {
+        case "create_employee":
+            return `Created employee ${target} (#${details.employee_number || "?"})`;
+        case "update_employee":
+            return `Updated employee profile for ${target}`;
+        case "delete_user":
+            return `Deleted user account: ${target}`;
+        case "login":
+            return `User logged in`;
+        case "create_incident":
+            return `Reported new incident: ${target}`;
+        case "update_incident":
+            return `Updated incident: ${target}`;
+        case "delete_incident":
+            return `Deleted incident record`;
+        case "update_custom_reports":
+            return `Updated custom reports configuration (${details.count || 0} reports)`;
+        case "block_company":
+            return `Blocked company access. Reason: ${details.reason || "Not specified"}`;
+        case "unblock_company":
+            return `Unblocked company access.`;
+        case "invoice_correction":
+            return `Correction: ${details.amount} (${details.reason})`;
+        case "assign_addon":
+            return `Assigned module ${details.addon_name || ""} to company`;
+        default:
+            const humanAction = action.replace(/_/g, " ");
+            return `${humanAction.charAt(0).toUpperCase() + humanAction.slice(1)}: ${target}`;
+    }
+};
+
 interface Company {
     id: string;
     name: string;
@@ -318,10 +354,7 @@ export default function CompanyDetail() {
             .order("created_at", { ascending: false })
             .limit(50); // Increased limit to 50 for better visibility
 
-        // Additionally filter out actions by the current super admin user if user context is available
-        if (user?.id) {
-            query = query.neq("actor_id", user.id);
-        }
+
 
         const { data, error } = await query;
 
@@ -1363,26 +1396,14 @@ export default function CompanyDetail() {
                                                 <TableCell>{log.actor_email || "System"}</TableCell>
                                                 <TableCell>{log.target_name || log.target_type || "-"}</TableCell>
                                                 <TableCell className="max-w-[250px]">
-                                                    {log.details && typeof log.details === 'object' ? (
-                                                        <div className="flex flex-col gap-1 text-xs">
-                                                            {Object.entries(log.details).slice(0, 3).map(([key, value]) => (
-                                                                <div key={key} className="flex items-start gap-1">
-                                                                    <span className="font-medium capitalize text-muted-foreground shrink-0">
-                                                                        {key.replace(/_/g, " ")}:
-                                                                    </span>
-                                                                    <span className="truncate text-foreground" title={String(value)}>
-                                                                        {String(value)}
-                                                                    </span>
-                                                                </div>
-                                                            ))}
-                                                            {Object.keys(log.details).length > 3 && (
-                                                                <span className="text-[10px] text-muted-foreground italic">
-                                                                    +{Object.keys(log.details).length - 3} more...
-                                                                </span>
-                                                            )}
+                                                    <span className="text-sm font-medium text-foreground">
+                                                        {formatLogDescription(log)}
+                                                    </span>
+                                                    {/* Show extra details for context if needed, subtly */}
+                                                    {log.details?.ip && (
+                                                        <div className="text-xs text-muted-foreground mt-0.5">
+                                                            IP: {log.details.ip}
                                                         </div>
-                                                    ) : (
-                                                        <span className="text-muted-foreground text-sm">-</span>
                                                     )}
                                                 </TableCell>
                                                 <TableCell className="whitespace-nowrap">

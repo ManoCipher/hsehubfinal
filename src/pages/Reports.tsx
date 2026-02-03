@@ -57,6 +57,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuditLog } from "@/hooks/useAuditLog";
 import {
   LineChart,
   Line,
@@ -118,6 +119,7 @@ export default function Reports() {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { logAction } = useAuditLog();
 
   const [activeSection, setActiveSection] = useState("overview");
   const [reportName, setReportName] = useState("Monthly Safety Report");
@@ -278,6 +280,15 @@ export default function Reports() {
     try {
       localStorage.setItem('hse_custom_reports', JSON.stringify(reports));
       setCustomReports(reports);
+
+      // Log action
+      logAction({
+        action: "update_custom_reports",
+        targetType: "reports",
+        targetId: "custom_reports",
+        targetName: "Custom Reports Configuration",
+        details: { count: reports.length }
+      });
     } catch (error) {
       console.error('Error saving custom reports:', error);
     }

@@ -58,6 +58,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuditLog } from "@/hooks/useAuditLog";
 import { format } from "date-fns";
 
 interface Incident {
@@ -101,6 +102,7 @@ export default function Incidents() {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { logAction } = useAuditLog();
 
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -253,16 +255,43 @@ export default function Incidents() {
           .eq("id", editingIncident.id);
 
         if (error) throw error;
+
+        logAction({
+          action: "update_incident",
+          targetType: "incident",
+          targetId: editingIncident.id,
+          targetName: formData.title,
+          details: {
+            severity: formData.severity,
+            type: formData.incident_type,
+            status: formData.investigation_status
+          }
+        });
+
         toast({
           title: "Success",
           description: "Incident updated successfully",
         });
       } else {
-        const { error } = await supabase
+        const { data: newIncident, error } = await supabase
           .from("incidents" as any)
-          .insert(incidentData as any);
+          .insert(incidentData as any)
+          .select()
+          .single();
 
         if (error) throw error;
+
+        logAction({
+          action: "create_incident",
+          targetType: "incident",
+          targetId: newIncident?.id,
+          targetName: formData.title,
+          details: {
+            severity: formData.severity,
+            type: formData.incident_type
+          }
+        });
+
         toast({
           title: "Success",
           description: "Incident reported successfully",
@@ -290,6 +319,15 @@ export default function Incidents() {
         .delete()
         .eq("id", id);
       if (error) throw error;
+
+      logAction({
+        action: "delete_incident",
+        targetType: "incident",
+        targetId: id,
+        targetName: "Incident",
+        details: { id }
+      });
+
       toast({ title: "Success", description: "Incident deleted successfully" });
       fetchIncidents();
     } catch (error: any) {
