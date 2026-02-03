@@ -59,6 +59,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 
 // Types
@@ -346,6 +347,71 @@ export default function RiskAssessments() {
     }
   };
 
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF();
+
+      // Add Metadata
+      const title = language === "de" ? "Risikobewertungsbericht" : "Risk Assessment Report";
+      const timestamp = new Date().toLocaleString();
+
+      // Title
+      doc.setFontSize(18);
+      doc.text(title, 14, 22);
+
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text(`${t("common.generatedOn") || "Generated on"}: ${timestamp}`, 14, 30);
+
+      // Define columns
+      const tableColumn = [
+        "Title",
+        "Department",
+        "Location",
+        "Hazard",
+        "Risk Level",
+        "Status",
+        "Date"
+      ];
+
+      // Define rows
+      const tableRows = filteredRisks.map(risk => [
+        risk.title,
+        risk.departments?.name || "-",
+        risk.locations?.name || "-",
+        risk.hazard_category || "-",
+        risk.risk_level?.toUpperCase() || "-",
+        risk.status || "-",
+        risk.assessment_date || "-"
+      ]);
+
+      // Generate table
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: 35,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+      });
+
+      // Save the PDF
+      doc.save("Risk_Assessments.pdf");
+
+      toast({
+        title: "Success",
+        description: "PDF exported successfully",
+      });
+    } catch (error) {
+      console.error("PDF Export Error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to export PDF",
+        variant: "destructive",
+      });
+    }
+  };
+
   const onSubmit = async () => {
     if (!companyId) {
       toast({
@@ -614,16 +680,7 @@ export default function RiskAssessments() {
               <div className="flex gap-2 flex-wrap">
                 <Button
                   className="whitespace-nowrap"
-                  onClick={() => {
-                    toast({
-                      title:
-                        language === "de" ? "PDF exportieren" : "Export PDF",
-                      description:
-                        language === "de"
-                          ? "PDF-Export-Funktion kommt bald"
-                          : "PDF export functionality coming soon",
-                    });
-                  }}
+                  onClick={handleExportPDF}
                 >
                   <FileDown className="w-4 h-4 mr-2" />
                   {language === "de" ? "PDF Export" : "Export PDF"}
