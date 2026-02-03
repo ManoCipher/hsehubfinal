@@ -4303,6 +4303,7 @@ export default function EmployeeProfile() {
                       if (appointmentDate && selectedCheckupForAppointment) {
                         handleUpdateCheckup(selectedCheckupForAppointment.id, {
                           appointment_date: format(appointmentDate, "yyyy-MM-dd"),
+                          status: 'planned',
                         });
                         setIsAppointmentDialogOpen(false);
                       } else {
