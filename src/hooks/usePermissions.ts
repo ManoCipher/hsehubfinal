@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { toast } from "sonner";
 import { 
   DetailedPermissions, 
   PermissionCategory,
@@ -218,58 +217,6 @@ export function usePermissions() {
       fetchPermissions();
     }
   }, [authLoading, fetchPermissions]);
-
-  // Real-time subscription to custom_roles changes
-  useEffect(() => {
-    if (!companyId || !userRole || userRole === "super_admin" || userRole === "company_admin") {
-      // Skip subscription for admins or if no company/role
-      return;
-    }
-
-    logRBAC("Setting up real-time subscription for role changes...");
-
-    // Subscribe to changes in custom_roles table for this company
-    const channel = supabase
-      .channel(`custom_roles_changes_${companyId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'custom_roles',
-          filter: `company_id=eq.${companyId}`
-        },
-        (payload) => {
-          logRBAC("Role configuration changed, refreshing permissions...", payload);
-          // Get user's current role from team_members
-          supabase
-            .from("team_members")
-            .select("role")
-            .eq("user_id", user?.id)
-            .eq("company_id", companyId)
-            .maybeSingle()
-            .then(({ data }) => {
-              const currentRole = data?.role;
-              // Only refresh if the updated role matches user's role
-              if (payload.new && (payload.new as any).role_name === currentRole) {
-                logRBAC(`Your role (${currentRole}) was updated, refreshing permissions...`);
-                fetchPermissions();
-                toast.info("Your role permissions have been updated", {
-                  description: "Your access rights may have changed.",
-                  duration: 5000,
-                });
-              }
-            });
-        }
-      )
-      .subscribe();
-
-    // Cleanup subscription on unmount
-    return () => {
-      logRBAC("Cleaning up real-time subscription...");
-      supabase.removeChannel(channel);
-    };
-  }, [companyId, userRole, user?.id, fetchPermissions]);
 
   // Check if user has permission for a specific feature
   const hasPermission = useCallback(
