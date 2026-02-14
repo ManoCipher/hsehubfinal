@@ -217,8 +217,18 @@ export default function EmployeeProfile() {
   const [noteVisibilityMode, setNoteVisibilityMode] = useState<'everyone' | 'specific'>('everyone');
   const [selectedVisibilityUsers, setSelectedVisibilityUsers] = useState<string[]>([]);
 
-  // Ref for notes textarea to handle formatting
-  const notesTextareaRef = useRef<HTMLTextAreaElement>(null);
+  // Ref for notes contentEditable div to handle formatting
+  const notesTextareaRef = useRef<HTMLDivElement>(null);
+  // Ref for hidden file input used for note attachments
+  const noteAttachmentInputRef = useRef<HTMLInputElement>(null);
+  // Emoji picker state
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  // Link popover state
+  const [showLinkPopover, setShowLinkPopover] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkLabel, setLinkLabel] = useState('');
+  // Active formatting state
+  const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
 
   // Note reply state
   const [replyingToNoteId, setReplyingToNoteId] = useState<string | null>(null);
@@ -1029,7 +1039,9 @@ export default function EmployeeProfile() {
   };
 
   const handleSaveNotes = async () => {
-    if (!notes.trim()) return;
+    // Check text content (not HTML) to determine if note is empty
+    const textContent = notesTextareaRef.current?.textContent?.trim() || '';
+    if (!textContent) return;
 
     try {
       // Get existing notes
@@ -1095,6 +1107,10 @@ export default function EmployeeProfile() {
 
       toast.success("Note added successfully");
       setNotes("");
+      // Clear the contentEditable editor
+      if (notesTextareaRef.current) {
+        notesTextareaRef.current.innerHTML = "";
+      }
       setShowNotesMentionDropdown(false);
       // Reset visibility to 'everyone' after saving
       setNoteVisibilityMode('everyone');
@@ -1312,38 +1328,72 @@ export default function EmployeeProfile() {
     }
   };
 
-  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value;
-    const cursorPos = e.target.selectionStart;
+  const handleNotesChange = () => {
+    const editorDiv = notesTextareaRef.current;
+    if (!editorDiv) return;
+
+    const value = editorDiv.innerHTML || '';
     setNotes(value);
-    setCursorPosition(cursorPos);
 
-    // Check for @ mention
-    const textBeforeCursor = value.substring(0, cursorPos);
-    const lastAtIndex = textBeforeCursor.lastIndexOf("@");
+    // Check for @ mention using text content
+    const textContent = editorDiv.textContent || '';
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      const textNode = range.startContainer;
+      const text = textNode.textContent || '';
+      const cursorPos = range.startOffset;
+      const textBeforeCursor = text.substring(0, cursorPos);
+      const lastAtIndex = textBeforeCursor.lastIndexOf("@");
 
-    if (lastAtIndex !== -1) {
-      const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
-      // Check if there's no space after @
-      if (!textAfterAt.includes(" ") && textAfterAt.length >= 0) {
-        setNotesMentionSearch(textAfterAt);
-        setShowNotesMentionDropdown(true);
+      if (lastAtIndex !== -1) {
+        const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
+        if (!textAfterAt.includes(" ") && textAfterAt.length >= 0) {
+          setNotesMentionSearch(textAfterAt);
+          setShowNotesMentionDropdown(true);
+        } else {
+          setShowNotesMentionDropdown(false);
+        }
       } else {
         setShowNotesMentionDropdown(false);
       }
-    } else {
-      setShowNotesMentionDropdown(false);
     }
   };
 
-  const handleMentionSelect = (employeeName: string) => {
-    const textBeforeCursor = notes.substring(0, cursorPosition);
-    const lastAtIndex = textBeforeCursor.lastIndexOf("@");
-    const textBeforeAt = notes.substring(0, lastAtIndex);
-    const textAfterCursor = notes.substring(cursorPosition);
+  // Update active formatting state based on cursor position
+  const updateActiveFormats = () => {
+    const editorDiv = notesTextareaRef.current;
+    if (!editorDiv) return;
 
-    const newText = `${textBeforeAt}@${employeeName} ${textAfterCursor}`;
-    setNotes(newText);
+    const newFormats = new Set<string>();
+
+    // Check for bold, italic, underline at current selection
+    if (document.queryCommandState('bold')) newFormats.add('bold');
+    if (document.queryCommandState('italic')) newFormats.add('italic');
+    if (document.queryCommandState('underline')) newFormats.add('underline');
+
+    setActiveFormats(newFormats);
+  };
+
+  const handleMentionSelect = (employeeName: string) => {
+    const editorDiv = notesTextareaRef.current;
+    if (!editorDiv) return;
+
+    // Simple approach: just insert the mention at the current cursor position
+    editorDiv.focus();
+
+    // Remove the @ and any text after it that was typed
+    const text = editorDiv.textContent || '';
+    const lastAtIndex = text.lastIndexOf('@');
+    if (lastAtIndex !== -1) {
+      // Clear from @ to end
+      const beforeAt = text.substring(0, lastAtIndex);
+      editorDiv.textContent = beforeAt;
+    }
+
+    // Insert the formatted mention
+    document.execCommand('insertText', false, `@${employeeName} `);
+    setNotes(editorDiv.innerHTML);
     setShowNotesMentionDropdown(false);
   };
 
@@ -1356,55 +1406,171 @@ export default function EmployeeProfile() {
     emp.full_name.toLowerCase().includes(notesMentionSearch.toLowerCase())
   );
 
-  // Rich text formatting functions
-  const applyFormatting = (formatType: 'bold' | 'italic' | 'underline' | 'list' | 'link') => {
-    const textarea = notesTextareaRef.current;
-    if (!textarea) return;
+  // Rich text formatting functions using execCommand for contentEditable
+  const applyFormatting = (formatType: 'bold' | 'italic' | 'underline' | 'list') => {
+    const editorDiv = notesTextareaRef.current;
+    if (!editorDiv) return;
 
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = notes.substring(start, end);
-    let newText = '';
-    let cursorOffset = 0;
+    editorDiv.focus();
 
     switch (formatType) {
       case 'bold':
-        newText = selectedText ? `**${selectedText}**` : '**bold text**';
-        cursorOffset = selectedText ? 2 : 2;
+        document.execCommand('bold', false);
         break;
       case 'italic':
-        newText = selectedText ? `*${selectedText}*` : '*italic text*';
-        cursorOffset = selectedText ? 1 : 1;
+        document.execCommand('italic', false);
         break;
       case 'underline':
-        newText = selectedText ? `<u>${selectedText}</u>` : '<u>underlined text</u>';
-        cursorOffset = selectedText ? 3 : 3;
+        document.execCommand('underline', false);
         break;
-      case 'list':
-        const lines = (selectedText || 'List item').split('\n');
-        newText = lines.map(line => line.trim() ? `- ${line}` : line).join('\n');
-        cursorOffset = 2;
+      case 'list': {
+        // Insert a bullet list - check if we're already in a list first
+        const selection = window.getSelection();
+        if (!selection || !selection.rangeCount) break;
+
+        // Check if cursor is inside a list
+        let node = selection.anchorNode;
+        let inList = false;
+        while (node && node !== editorDiv) {
+          if (node.nodeName === 'UL' || node.nodeName === 'OL') {
+            inList = true;
+            break;
+          }
+          node = node.parentNode;
+        }
+
+        if (inList) {
+          // Already in a list, just add a new empty item
+          document.execCommand('insertHTML', false, '<li><br></li>');
+          // Move cursor into the new list item
+          setTimeout(() => {
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0) {
+              const range = sel.getRangeAt(0);
+              range.collapse(false);
+            }
+          }, 0);
+        } else {
+          // Not in a list, create a new one
+          const selectedText = selection.toString() || '';
+          if (selectedText) {
+            const items = selectedText.split('\n').filter(l => l.trim()).map(l => `<li>${l.trim()}</li>`).join('');
+            document.execCommand('insertHTML', false, `<ul style="list-style-type:disc;margin:4px 0;padding-left:1.5rem">${items}</ul>`);
+          } else {
+            document.execCommand('insertHTML', false, '<ul style="list-style-type:disc;margin:4px 0;padding-left:1.5rem"><li><br></li></ul>');
+            // Move cursor into the new list item
+            setTimeout(() => {
+              const sel = window.getSelection();
+              if (sel && sel.rangeCount > 0) {
+                const range = sel.getRangeAt(0);
+                range.collapse(false);
+              }
+            }, 0);
+          }
+        }
         break;
-      case 'link':
-        newText = selectedText ? `[${selectedText}](url)` : '[link text](url)';
-        cursorOffset = selectedText ? selectedText.length + 3 : 12;
-        break;
+      }
     }
 
-    const before = notes.substring(0, start);
-    const after = notes.substring(end);
-    const updatedNotes = before + newText + after;
-
-    setNotes(updatedNotes);
-
-    setTimeout(() => {
-      if (textarea) {
-        const newCursorPos = start + (selectedText ? newText.length : cursorOffset);
-        textarea.focus();
-        textarea.setSelectionRange(newCursorPos, newCursorPos);
-      }
-    }, 0);
+    // Update notes state with the new HTML
+    setNotes(editorDiv.innerHTML);
   };
+
+  // Insert link into the notes editor via inline popover
+  const handleInsertLink = () => {
+    const editorDiv = notesTextareaRef.current;
+    if (!editorDiv || !linkUrl.trim()) return;
+
+    const label = linkLabel.trim() || linkUrl.trim();
+    const url = linkUrl.trim().startsWith('http') ? linkUrl.trim() : `https://${linkUrl.trim()}`;
+
+    editorDiv.focus();
+    document.execCommand('insertHTML', false, `<a href="${url}" target="_blank" style="color:#3b82f6;text-decoration:underline">${label}</a>&nbsp;`);
+    setNotes(editorDiv.innerHTML);
+    setLinkUrl('');
+    setLinkLabel('');
+    setShowLinkPopover(false);
+  };
+
+  // Insert emoji into the notes contentEditable div
+  const handleInsertEmoji = (emoji: string) => {
+    const editorDiv = notesTextareaRef.current;
+    if (!editorDiv) return;
+
+    editorDiv.focus();
+    document.execCommand('insertText', false, emoji);
+    setNotes(editorDiv.innerHTML);
+    setShowEmojiPicker(false);
+  };
+
+  // Handle note attachment via Paperclip button - upload to storage and insert clickable link
+  const handleNoteAttachment = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !companyId || !user) return;
+
+    const editorDiv = notesTextareaRef.current;
+    if (!editorDiv) return;
+
+    try {
+      // Show uploading indicator
+      const uploadingHtml = `<span style="background:#e0e7ff;padding:2px 6px;border-radius:4px;font-size:13px;color:#3730a3">📎 Uploading ${file.name}...</span>&nbsp;`;
+      editorDiv.innerHTML += uploadingHtml;
+      setNotes(editorDiv.innerHTML);
+
+      // Generate unique file path
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `${companyId}/note-attachments/${fileName}`;
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from("documents")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get signed URL instead of public URL to avoid "bucket not found" error
+      const { data: signedUrlData, error: urlError } = await supabase.storage
+        .from("documents")
+        .createSignedUrl(filePath, 60 * 60 * 24 * 365); // 1 year expiry
+
+      if (urlError || !signedUrlData) {
+        throw new Error("Failed to get download URL");
+      }
+
+      const downloadUrl = signedUrlData.signedUrl;
+
+      // Remove uploading indicator and insert clickable link
+      const currentHtml = editorDiv.innerHTML.replace(uploadingHtml, '');
+      const attachmentHtml = `<a href="${downloadUrl}" target="_blank" download="${file.name}" style="display:inline-flex;align-items:center;background:#f1f5f9;padding:4px 8px;border-radius:6px;font-size:13px;color:#0f172a;text-decoration:none;border:1px solid #e2e8f0;transition:all 0.2s;" onmouseover="this.style.background='#e2e8f0';this.style.borderColor='#cbd5e1'" onmouseout="this.style.background='#f1f5f9';this.style.borderColor='#e2e8f0'">📎 ${file.name}</a>&nbsp;`;
+      editorDiv.innerHTML = currentHtml + attachmentHtml;
+      setNotes(editorDiv.innerHTML);
+
+      toast.success(`${file.name} attached successfully`);
+    } catch (error: any) {
+      console.error("Error uploading attachment:", error);
+      toast.error("Failed to upload attachment");
+      // Remove uploading indicator if there was an error
+      const currentHtml = editorDiv.innerHTML;
+      editorDiv.innerHTML = currentHtml.replace(/📎 Uploading .*?<\/span>&nbsp;/g, '');
+      setNotes(editorDiv.innerHTML);
+    }
+
+    // Reset file input
+    if (event.target) event.target.value = '';
+  };
+
+  // Common emoji list
+  const commonEmojis = [
+    '😀', '😃', '😄', '😁', '😊', '🙂', '😉', '😍',
+    '🤔', '😐', '😑', '😶', '🙄', '😏', '😣', '😥',
+    '👍', '👎', '👏', '🙌', '🤝', '💪', '✌️', '🤞',
+    '❤️', '🔥', '⭐', '✅', '❌', '⚠️', '📌', '📎',
+    '🎯', '💡', '📝', '🔔', '📊', '📈', '🏆', '🎉',
+  ];
 
   const handleAddTag = async () => {
     if (!newTag.trim()) return;
@@ -2259,12 +2425,23 @@ export default function EmployeeProfile() {
   const renderNoteContent = (content: string) => {
     if (!content) return null;
 
-    // Split content by @mentions
+    // Check if content contains HTML tags (rich text)
+    const containsHtml = /<[a-z][\s\S]*>/i.test(content);
+
+    if (containsHtml) {
+      // Render HTML content with @mention highlighting
+      const processedHtml = content.replace(
+        /(@\w+(?:\s+\w+)*)/g,
+        '<span class="bg-primary/20 text-primary px-1 rounded">$1</span>'
+      );
+      return <span dangerouslySetInnerHTML={{ __html: processedHtml }} />;
+    }
+
+    // Plain text fallback - split content by @mentions
     const parts = content.split(/(@\w+(?:\s+\w+)*)/g);
 
     return parts.map((part, index) => {
       if (part.startsWith("@")) {
-        // This is a mention - render with colored background
         return (
           <span key={index} className="bg-primary/20 text-primary px-1 rounded">
             {part}
@@ -3388,7 +3565,7 @@ export default function EmployeeProfile() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 w-7 p-0"
+                              className={`h-7 w-7 p-0 ${activeFormats.has('bold') ? 'bg-accent' : ''}`}
                               onClick={() => applyFormatting('bold')}
                             >
                               <Bold className="w-3.5 h-3.5" />
@@ -3396,7 +3573,7 @@ export default function EmployeeProfile() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 w-7 p-0"
+                              className={`h-7 w-7 p-0 ${activeFormats.has('italic') ? 'bg-accent' : ''}`}
                               onClick={() => applyFormatting('italic')}
                             >
                               <Italic className="w-3.5 h-3.5" />
@@ -3404,7 +3581,7 @@ export default function EmployeeProfile() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 w-7 p-0"
+                              className={`h-7 w-7 p-0 ${activeFormats.has('underline') ? 'bg-accent' : ''}`}
                               onClick={() => applyFormatting('underline')}
                             >
                               <Underline className="w-3.5 h-3.5" />
@@ -3413,52 +3590,117 @@ export default function EmployeeProfile() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-7 w-7 p-0"
+                              className={`h-7 w-7 p-0 ${activeFormats.has('list') ? 'bg-accent' : ''}`}
                               onClick={() => applyFormatting('list')}
                             >
                               <List className="w-3.5 h-3.5" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0"
-                              onClick={() => applyFormatting('link')}
-                            >
-                              <Link className="w-3.5 h-3.5" />
-                            </Button>
+                            <Popover open={showLinkPopover} onOpenChange={setShowLinkPopover}>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 w-7 p-0"
+                                >
+                                  <Link className="w-3.5 h-3.5" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-72 p-3" align="start">
+                                <div className="space-y-2">
+                                  <p className="text-sm font-medium">Insert Link</p>
+                                  <Input
+                                    placeholder="https://example.com"
+                                    value={linkUrl}
+                                    onChange={(e) => setLinkUrl(e.target.value)}
+                                    className="h-8 text-sm"
+                                    onKeyDown={(e) => e.key === 'Enter' && handleInsertLink()}
+                                  />
+                                  <Input
+                                    placeholder="Display text (optional)"
+                                    value={linkLabel}
+                                    onChange={(e) => setLinkLabel(e.target.value)}
+                                    className="h-8 text-sm"
+                                    onKeyDown={(e) => e.key === 'Enter' && handleInsertLink()}
+                                  />
+                                  <div className="flex justify-end gap-2">
+                                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setShowLinkPopover(false); setLinkUrl(''); setLinkLabel(''); }}>Cancel</Button>
+                                    <Button size="sm" className="h-7 text-xs" onClick={handleInsertLink} disabled={!linkUrl.trim()}>Insert</Button>
+                                  </div>
+                                </div>
+                              </PopoverContent>
+                            </Popover>
                             <div className="w-px h-4 bg-border mx-1" />
                             <Button
                               variant="ghost"
                               size="sm"
                               className="h-7 w-7 p-0"
+                              onClick={() => noteAttachmentInputRef.current?.click()}
                             >
                               <Paperclip className="w-3.5 h-3.5" />
                             </Button>
+                            <input
+                              ref={noteAttachmentInputRef}
+                              type="file"
+                              className="hidden"
+                              onChange={handleNoteAttachment}
+                            />
                             <Button
                               variant="ghost"
                               size="sm"
                               className="h-7 w-7 p-0"
-                              onClick={() => setShowNotesMentionDropdown(!showNotesMentionDropdown)}
+                              onClick={() => {
+                                const editorDiv = notesTextareaRef.current;
+                                if (editorDiv) {
+                                  editorDiv.focus();
+                                  document.execCommand('insertText', false, '@');
+                                  setNotes(editorDiv.innerHTML);
+                                  // Trigger the mention dropdown
+                                  setTimeout(() => setShowNotesMentionDropdown(true), 50);
+                                }
+                              }}
                             >
                               <AtSign className="w-3.5 h-3.5" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0"
-                            >
-                              <Smile className="w-3.5 h-3.5" />
-                            </Button>
+                            <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 w-7 p-0"
+                                >
+                                  <Smile className="w-3.5 h-3.5" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-72 p-2" align="end">
+                                <div className="grid grid-cols-8 gap-1">
+                                  {commonEmojis.map((emoji) => (
+                                    <button
+                                      key={emoji}
+                                      className="h-8 w-8 flex items-center justify-center hover:bg-muted rounded text-lg cursor-pointer"
+                                      onClick={() => handleInsertEmoji(emoji)}
+                                    >
+                                      {emoji}
+                                    </button>
+                                  ))}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
                           </div>
 
-                          {/* Textarea */}
+                          {/* Rich Text Editor */}
                           <div className="relative">
-                            <Textarea
+                            <div
                               ref={notesTextareaRef}
-                              placeholder="Add a note..."
-                              value={notes}
-                              onChange={handleNotesChange}
-                              className="min-h-[60px] text-sm border-0 p-0 focus-visible:ring-0 resize-none"
+                              contentEditable
+                              onInput={() => {
+                                handleNotesChange();
+                                updateActiveFormats();
+                              }}
+                              onClick={updateActiveFormats}
+                              onKeyUp={updateActiveFormats}
+                              data-placeholder="Add a note..."
+                              className="min-h-[60px] text-sm border-0 p-0 focus-visible:outline-none resize-none empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground"
+                              style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
                             />
                             {showNotesMentionDropdown &&
                               filteredNotesEmployees.length > 0 && (
@@ -3468,9 +3710,10 @@ export default function EmployeeProfile() {
                                       <div
                                         key={emp.id}
                                         className="px-3 py-2 hover:bg-muted rounded cursor-pointer"
-                                        onClick={() =>
-                                          handleMentionSelect(emp.full_name)
-                                        }
+                                        onMouseDown={(e) => {
+                                          e.preventDefault(); // Prevent editor from losing focus
+                                          handleMentionSelect(emp.full_name);
+                                        }}
                                       >
                                         <div className="font-medium text-sm">
                                           {emp.full_name}
