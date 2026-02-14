@@ -194,8 +194,6 @@ export default function Settings() {
     fieldName: "",
     fieldLabel: "",
     fieldType: "text",
-    extractedFromResume: false,
-    isRequired: false,
   });
   const [isSubmittingProfileField, setIsSubmittingProfileField] = useState(false);
 
@@ -2524,8 +2522,6 @@ export default function Settings() {
         fieldName: field.field_name,
         fieldLabel: field.field_label,
         fieldType: field.field_type,
-        extractedFromResume: field.extracted_from_resume || false,
-        isRequired: field.is_required || false,
       });
     } else {
       setEditingProfileField(null);
@@ -2533,8 +2529,6 @@ export default function Settings() {
         fieldName: "",
         fieldLabel: "",
         fieldType: "text",
-        extractedFromResume: false,
-        isRequired: false,
       });
     }
     setIsProfileFieldDialogOpen(true);
@@ -2547,8 +2541,6 @@ export default function Settings() {
       fieldName: "",
       fieldLabel: "",
       fieldType: "text",
-      extractedFromResume: false,
-      isRequired: false,
     });
   };
 
@@ -2574,8 +2566,6 @@ export default function Settings() {
           .update({
             field_label: profileFieldForm.fieldLabel,
             field_type: profileFieldForm.fieldType,
-            extracted_from_resume: profileFieldForm.extractedFromResume,
-            is_required: profileFieldForm.isRequired,
             updated_at: new Date().toISOString(),
           })
           .eq("id", editingProfileField.id);
@@ -2596,8 +2586,6 @@ export default function Settings() {
               field_name: profileFieldForm.fieldName,
               field_label: profileFieldForm.fieldLabel,
               field_type: profileFieldForm.fieldType,
-              extracted_from_resume: profileFieldForm.extractedFromResume,
-              is_required: profileFieldForm.isRequired,
               display_order: profileFields.length,
             },
           ]);
@@ -3938,8 +3926,6 @@ export default function Settings() {
                             <TableHead>{t("settings.fieldLabel")}</TableHead>
                             <TableHead>{t("settings.fieldName")}</TableHead>
                             <TableHead>{t("settings.fieldType")}</TableHead>
-                            <TableHead className="text-center">{t("settings.extractedFromResume")}</TableHead>
-                            <TableHead className="text-center">{t("settings.fieldRequired")}</TableHead>
                             <TableHead className="text-right">{t("common.actions")}</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -3947,7 +3933,7 @@ export default function Settings() {
                           {profileFields.length === 0 ? (
                             <TableRow>
                               <TableCell
-                                colSpan={6}
+                                colSpan={4}
                                 className="text-center py-8 text-muted-foreground"
                               >
                                 {t("settings.noProfileFields")}
@@ -3969,25 +3955,6 @@ export default function Settings() {
                                   <Badge variant="secondary">
                                     {field.field_type}
                                   </Badge>
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  {field.extracted_from_resume ? (
-                                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                                      <CheckSquare className="w-3 h-3 mr-1" />
-                                      {t("common.yes")}
-                                    </Badge>
-                                  ) : (
-                                    <span className="text-muted-foreground">-</span>
-                                  )}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  {field.is_required ? (
-                                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                                      {t("common.yes")}
-                                    </Badge>
-                                  ) : (
-                                    <span className="text-muted-foreground">-</span>
-                                  )}
                                 </TableCell>
                                 <TableCell className="text-right">
                                   <div className="flex justify-end gap-2">
@@ -4100,40 +4067,6 @@ export default function Settings() {
                             <SelectItem value="boolean">{t("settings.fieldTypeBoolean")}</SelectItem>
                           </SelectContent>
                         </Select>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          id="profile-extracted-from-resume"
-                          className="w-4 h-4 cursor-pointer"
-                          checked={profileFieldForm.extractedFromResume}
-                          onChange={(e) =>
-                            setProfileFieldForm((prev) => ({
-                              ...prev,
-                              extractedFromResume: e.target.checked,
-                            }))
-                          }
-                        />
-                        <Label htmlFor="profile-extracted-from-resume" className="cursor-pointer font-normal">
-                          {t("settings.extractedFromResume")}
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          id="profile-field-required"
-                          className="w-4 h-4 cursor-pointer"
-                          checked={profileFieldForm.isRequired}
-                          onChange={(e) =>
-                            setProfileFieldForm((prev) => ({
-                              ...prev,
-                              isRequired: e.target.checked,
-                            }))
-                          }
-                        />
-                        <Label htmlFor="profile-field-required" className="cursor-pointer font-normal">
-                          {t("settings.fieldRequired")}
-                        </Label>
                       </div>
                     </div>
                     <DialogFooter>
