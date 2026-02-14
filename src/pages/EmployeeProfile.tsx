@@ -1379,7 +1379,7 @@ export default function EmployeeProfile() {
     const editorDiv = notesTextareaRef.current;
     if (!editorDiv) return;
 
-    // Simple approach: just insert the mention at the current cursor position
+    // Find and delete the @ search text, then insert styled mention
     editorDiv.focus();
 
     // Remove the @ and any text after it that was typed
@@ -3652,7 +3652,19 @@ export default function EmployeeProfile() {
                                 const editorDiv = notesTextareaRef.current;
                                 if (editorDiv) {
                                   editorDiv.focus();
-                                  document.execCommand('insertText', false, '@');
+                                  // Insert @ at the current cursor position
+                                  const selection = window.getSelection();
+                                  if (selection && selection.rangeCount > 0) {
+                                    const range = selection.getRangeAt(0);
+                                    const textNode = document.createTextNode('@');
+                                    range.insertNode(textNode);
+                                    range.setStartAfter(textNode);
+                                    range.collapse(true);
+                                    selection.removeAllRanges();
+                                    selection.addRange(range);
+                                  } else {
+                                    document.execCommand('insertText', false, '@');
+                                  }
                                   setNotes(editorDiv.innerHTML);
                                   // Trigger the mention dropdown
                                   setTimeout(() => setShowNotesMentionDropdown(true), 50);
