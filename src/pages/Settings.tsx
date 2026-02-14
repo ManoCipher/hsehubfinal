@@ -1217,6 +1217,46 @@ export default function Settings() {
     }
   };
 
+  const handleChangeTeamMemberRole = async (memberId: string, memberName: string, oldRole: string, newRole: string) => {
+    if (!companyId) return;
+
+    try {
+      const { error } = await supabase
+        .from("team_members")
+        .update({ role: newRole })
+        .eq("id", memberId)
+        .eq("company_id", companyId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: `Role updated from ${oldRole} to ${newRole}`,
+      });
+
+      // Create audit log
+      logAction({
+        action: "update_team_member_role",
+        targetType: "team_member",
+        targetId: memberId,
+        targetName: memberName,
+        details: { old_role: oldRole, new_role: newRole }
+      });
+
+      // Refresh team members list
+      fetchTeamMembers();
+    } catch (err: unknown) {
+      const e = err as { message?: string } | Error | null;
+      const message =
+        e && "message" in e && e.message ? e.message : String(err);
+      toast({
+        title: "Error",
+        description: message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const getTableName = (title: string) => {
     const mapping: Record<string, string> = {
       Departments: "departments",
@@ -2271,7 +2311,7 @@ export default function Settings() {
   };
 
   // Enhanced RBAC Handler Functions
-  
+
   // Helper function to compute legacy permissions from detailed permissions
   const computeLegacyPermissions = (detailed: typeof DEFAULT_DETAILED_PERMISSIONS) => {
     return {
@@ -2333,9 +2373,9 @@ export default function Settings() {
     try {
       const { error } = await supabase
         .from("custom_roles")
-        .update({ 
+        .update({
           detailed_permissions: updatedDetailedPermissions,
-          permissions: updatedLegacyPermissions 
+          permissions: updatedLegacyPermissions
         })
         .eq("company_id", companyId)
         .eq("role_name", roleName);
@@ -3137,9 +3177,28 @@ export default function Settings() {
                                   </TableCell>
                                   <TableCell>{member.email}</TableCell>
                                   <TableCell>
-                                    <Badge variant="secondary">
-                                      {member.role}
-                                    </Badge>
+                                    <Select
+                                      value={member.role}
+                                      onValueChange={(newRole) =>
+                                        handleChangeTeamMemberRole(
+                                          member.id,
+                                          `${member.first_name} ${member.last_name}`,
+                                          member.role,
+                                          newRole
+                                        )
+                                      }
+                                    >
+                                      <SelectTrigger className="w-[180px]">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {Object.keys(roles).map((role) => (
+                                          <SelectItem key={role} value={role}>
+                                            {role}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
                                   </TableCell>
                                   <TableCell className="text-right">
                                     <div className="flex justify-end gap-2">
