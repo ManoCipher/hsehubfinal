@@ -33,6 +33,7 @@ import CompanyRegistration from "./pages/CompanyRegistration";
 import SuperAdminDashboard from "./pages/SuperAdmin/Dashboard";
 import SuperAdminCompanies from "./pages/SuperAdmin/Companies";
 import SuperAdminSubscriptions from "./pages/SuperAdmin/Subscriptions";
+import SuperAdminInvoices from "./pages/SuperAdmin/Invoices";
 import SuperAdminAddons from "./pages/SuperAdmin/Addons";
 import SuperAdminAnalytics from "./pages/SuperAdmin/Analytics";
 import SuperAdminPinVerification from "./pages/SuperAdmin/PinVerification";
@@ -103,6 +104,16 @@ const App = () => (
                   <SuperAdminRoute>
                     <MainLayout>
                       <SuperAdminSubscriptions />
+                    </MainLayout>
+                  </SuperAdminRoute>
+                }
+              />
+              <Route
+                path="/super-admin/invoices"
+                element={
+                  <SuperAdminRoute>
+                    <MainLayout>
+                      <SuperAdminInvoices />
                     </MainLayout>
                   </SuperAdminRoute>
                 }

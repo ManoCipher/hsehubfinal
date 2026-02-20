@@ -35,25 +35,130 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (companyId) {
+    if (companyId && user) {
       fetchNotifications();
       setupRealtimeSubscription();
     }
-  }, [companyId]);
+  }, [companyId, user]);
+
+  // Resolve the current user's display name from employees or team_members
+  const resolveUserName = async (): Promise<string | null> => {
+    if (!user?.email || !companyId) return null;
+
+    // Try employees first
+    const { data: emp } = await supabase
+      .from("employees")
+      .select("full_name")
+      .ilike("email", user.email)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (emp?.full_name) return emp.full_name;
+
+    // Try employees by user_id
+    const { data: empById } = await supabase
+      .from("employees")
+      .select("full_name")
+      .eq("user_id", user.id)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (empById?.full_name) return empById.full_name;
+
+    // Try team_members
+    const { data: member } = await supabase
+      .from("team_members")
+      .select("first_name, last_name")
+      .eq("user_id", user.id)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (member) return `${member.first_name} ${member.last_name}`.trim();
+
+    // Try team_members by email
+    const { data: memberByEmail } = await supabase
+      .from("team_members")
+      .select("first_name, last_name")
+      .ilike("email", user.email)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (memberByEmail) return `${memberByEmail.first_name} ${memberByEmail.last_name}`.trim();
+
+    return null;
+  };
+
+  // Fetch tasks that @mention the current user and convert to notification objects
+  const fetchTaskMentionNotifications = async (existingNotifIds: Set<string>): Promise<Notification[]> => {
+    const userName = await resolveUserName();
+    if (!userName) return [];
+
+    const { data: tasks } = await supabase
+      .from("tasks")
+      .select("id, title, description, created_at, status, assigned_to")
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (!tasks) return [];
+
+    const nameLower = userName.toLowerCase();
+    const taskNotifications: Notification[] = [];
+
+    for (const task of tasks) {
+      // Skip if a real notification already exists for this task
+      if (existingNotifIds.has(task.id)) continue;
+
+      const title = (task.title || "").toLowerCase();
+      const desc = (task.description || "").toLowerCase();
+
+      // Check if user is @mentioned in this task
+      const isMentioned = title.includes(`@${nameLower}`) || desc.includes(`@${nameLower}`);
+
+      if (isMentioned) {
+        taskNotifications.push({
+          id: `task-mention-${task.id}`,
+          title: "You were mentioned in a task",
+          message: `Task: "${task.title}"`,
+          category: "task",
+          type: "info",
+          is_read: task.status === "completed",
+          created_at: task.created_at,
+          related_id: task.id,
+        });
+      }
+    }
+
+    return taskNotifications;
+  };
 
   const fetchNotifications = async () => {
     try {
+      // 1. Fetch real notifications from the notifications table
       const { data, error } = await supabase
         .from("notifications")
         .select("*")
         .eq("company_id", companyId)
+        .eq("user_id", user?.id)
         .order("created_at", { ascending: false })
-        .limit(20);
+        .limit(50);
 
       if (error) throw error;
 
-      setNotifications(data || []);
-      setUnreadCount(data?.filter((n) => !n.is_read).length || 0);
+      const dbNotifications: Notification[] = data || [];
+
+      // 2. Collect related_ids of existing task notifications to avoid duplicates
+      const existingTaskIds = new Set<string>();
+      for (const n of dbNotifications) {
+        if (n.related_id) existingTaskIds.add(n.related_id);
+      }
+
+      // 3. Fetch task @mention notifications (tasks the user is mentioned in but no DB notification exists)
+      const taskMentionNotifs = await fetchTaskMentionNotifications(existingTaskIds);
+
+      // 4. Merge and sort by created_at descending
+      const merged = [...dbNotifications, ...taskMentionNotifs]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 20);
+
+      setNotifications(merged);
+      setUnreadCount(merged.filter((n) => !n.is_read).length);
     } catch (error) {
       console.error("Error fetching notifications:", error);
     }
@@ -61,22 +166,26 @@ export default function NotificationBell() {
 
   const setupRealtimeSubscription = () => {
     const channel = supabase
-      .channel("notifications-realtime")
+      .channel(`notifications-realtime-${user?.id}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "notifications",
-          filter: `company_id=eq.${companyId}`,
+          filter: `user_id=eq.${user?.id}`,
         },
         (payload) => {
           const newNotif = payload.new as Notification;
           setNotifications((prev) => [newNotif, ...prev]);
           setUnreadCount((prev) => prev + 1);
 
-          // Show toast for important notifications
-          if (newNotif.type === "warning" || newNotif.type === "error") {
+          // Show toast for all task mentions and important notifications
+          if (
+            newNotif.category === "task" ||
+            newNotif.type === "warning" ||
+            newNotif.type === "error"
+          ) {
             toast({
               title: newNotif.title,
               description: newNotif.message,
@@ -93,6 +202,14 @@ export default function NotificationBell() {
   };
 
   const markAsRead = async (id: string) => {
+    // Synthetic task-mention notifications are not in the DB
+    if (id.startsWith("task-mention-")) {
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+      );
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+      return;
+    }
     try {
       const { error } = await supabase
         .from("notifications")
@@ -116,6 +233,7 @@ export default function NotificationBell() {
         .from("notifications")
         .update({ is_read: true })
         .eq("company_id", companyId)
+        .eq("user_id", user?.id)
         .eq("is_read", false);
 
       if (error) throw error;

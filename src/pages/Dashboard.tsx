@@ -70,6 +70,7 @@ export default function Dashboard() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [taskStatusFilter, setTaskStatusFilter] = useState<string>("upcoming");
   const [currentEmployeeId, setCurrentEmployeeId] = useState<string | null>(null);
+  const [currentEmployeeName, setCurrentEmployeeName] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchEmployeeId = async () => {
@@ -80,36 +81,80 @@ export default function Dashboard() {
         // Use ilike for case-insensitive matching
         const { data: empByEmail, error } = await supabase
           .from("employees")
-          .select("id")
-          .eq("email", user.email) // Supabase email column is usually case sensitive if using eq, but let's try strict first.
-          // actually, let's use ilike to be safe.
-          // .ilike("email", user.email) -> syntax: .ilike('email', user.email)
+          .select("id, full_name")
+          .eq("email", user.email)
           .eq("company_id", companyId)
           .maybeSingle();
-
-        // If eq failed, try ilike manually or just rely on what we have. 
-        // Actually, let's stick to eq first but log the error.
 
         if (error) {
           console.error("❌ Error fetching employee ID:", error);
         }
 
         if (empByEmail) {
-          console.log("✅ Found Employee ID:", empByEmail.id);
+          console.log("✅ Found Employee ID (by email):", empByEmail.id);
           setCurrentEmployeeId(empByEmail.id);
+          setCurrentEmployeeName(empByEmail.full_name);
         } else {
-          console.log("⚠️ No employee profile linked to this email.");
-          // Try fallback case-insensitive search if primary failed
+          // Fallback 1: case-insensitive email match
           const { data: empByEmailInsen } = await supabase
             .from("employees")
-            .select("id")
+            .select("id, full_name")
             .ilike("email", user.email)
             .eq("company_id", companyId)
             .maybeSingle();
 
           if (empByEmailInsen) {
-            console.log("✅ Found Employee ID (Case Insensitive):", empByEmailInsen.id);
+            console.log("✅ Found Employee ID (case-insensitive email):", empByEmailInsen.id);
             setCurrentEmployeeId(empByEmailInsen.id);
+            setCurrentEmployeeName(empByEmailInsen.full_name);
+          } else {
+            // Fallback 2: match by auth user_id stored in employees.user_id column
+            console.log("⚠️ Email lookup failed — trying auth user_id fallback for:", user.id);
+            const { data: empByUserId } = await supabase
+              .from("employees")
+              .select("id, full_name")
+              .eq("user_id", user.id)
+              .eq("company_id", companyId)
+              .maybeSingle();
+
+            if (empByUserId) {
+              console.log("✅ Found Employee ID (by user_id):", empByUserId.id);
+              setCurrentEmployeeId(empByUserId.id);
+              setCurrentEmployeeName(empByUserId.full_name);
+            } else {
+              // Fallback 3: look up team_members table by user_id
+              console.log("⚠️ Not in employees table — trying team_members by user_id...");
+              const { data: memberByUserId } = await supabase
+                .from("team_members")
+                .select("id, first_name, last_name")
+                .eq("user_id", user.id)
+                .eq("company_id", companyId)
+                .maybeSingle();
+
+              if (memberByUserId) {
+                const fullName = `${memberByUserId.first_name} ${memberByUserId.last_name}`.trim();
+                console.log("✅ Found in team_members (by user_id):", fullName);
+                setCurrentEmployeeName(fullName);
+              } else {
+                // Fallback 4: look up team_members by email
+                const { data: memberByEmail } = await supabase
+                  .from("team_members")
+                  .select("id, first_name, last_name")
+                  .ilike("email", user.email)
+                  .eq("company_id", companyId)
+                  .maybeSingle();
+
+                if (memberByEmail) {
+                  const fullName = `${memberByEmail.first_name} ${memberByEmail.last_name}`.trim();
+                  console.log("✅ Found in team_members (by email):", fullName);
+                  setCurrentEmployeeName(fullName);
+                } else {
+                  console.warn("⚠️ No profile found in employees or team_members. Showing broadcast tasks only.");
+                  // Sentinel "" triggers fetchTasks to at least show broadcast tasks
+                  setCurrentEmployeeName("");
+                }
+              }
+            }
           }
         }
       }
@@ -135,10 +180,12 @@ export default function Dashboard() {
   }, [companyId, userRole, taskStatusFilter]);
 
   useEffect(() => {
-    if (companyId && userRole !== "super_admin" && currentEmployeeId) {
+    // Re-fetch tasks whenever employee identity resolves (currentEmployeeName becomes
+    // a string — even "" means "lookup finished, no profile found, show broadcast only")
+    if (companyId && userRole !== "super_admin" && currentEmployeeName !== null) {
       fetchTasks();
     }
-  }, [companyId, userRole, currentEmployeeId]);
+  }, [companyId, userRole, currentEmployeeId, currentEmployeeName]);
 
   const fetchStats = async () => {
     if (!companyId) return;
@@ -318,14 +365,9 @@ export default function Dashboard() {
   const fetchTasks = async () => {
     if (!companyId) return;
 
-    // Strict privacy check: Non-superadmins MUST have a linked employee profile to see tasks
-    // If we haven't found the employee ID yet, don't show random tasks.
-    // UPDATE: If we have an EMAIL, we can validly search for mentions. 
-    if (userRole !== "super_admin" && userRole !== "company_admin" && !currentEmployeeId && !user?.email) {
-      console.log("Waiting for employee ID or Email to fetch tasks...");
-      setTasks([]);
-      return;
-    }
+    // No guard here — even users without a linked employee profile
+    // should see broadcast tasks (tasks with no @mention).
+    // The client-side filter below handles all cases correctly.
 
     try {
       let query = supabase
@@ -354,48 +396,59 @@ export default function Dashboard() {
         query = query.eq("status", "completed");
       }
 
-      // Filter by assigned employee (current user) OR mentions
-      // Company Admins and Super Admins see ALL tasks for the company
-      // Filter by assigned employee (current user) OR mentions
-      // Company Admins and Super Admins see ALL tasks for the company
-      if (userRole !== "super_admin" && userRole !== "company_admin") {
-        const emailLike = user?.email ? `description.ilike.%${user.email}%` : "";
+      // Task visibility logic (evaluated CLIENT-SIDE after fetch):
+      // Broadcast  → neither title nor description has any @  → everyone sees it
+      // Mentioned  → title OR description contains @TheirName   → only that person
+      // Assigned   → assigned_to = their employee ID           → always visible
+      // Admin/SA   → see everything (no filter applied)
 
-        if (currentEmployeeId) {
-          if (emailLike) {
-            // ID AND Email available: assigned_to OR mentioned
-            query = query.or(`assigned_to.eq.${currentEmployeeId},${emailLike}`);
-          } else {
-            // Only ID available
-            query = query.eq("assigned_to", currentEmployeeId);
-          }
-        } else if (emailLike) {
-          // Only Email available (Employee profile not linked but User has email)
-          // We can only show tasks where they are mentioned
-          console.log("⚠️ Fetching tasks by Email Mention only (No Employee ID)");
-          // Use .filter because .or requires at least two conditions usually, but filter is raw
-          // actually, query.or works for single clause too but it's cleaner to use .ilike directly if single.
-          // But wait, chain is: select...eq(company)...
-          // query.ilike('description', `%${user.email}%`)
-          query = query.ilike("description", `%${user.email}%`);
-        }
-      }
-
-      const { data, error } = await query
+      const { data: rawData, error } = await query
         .order("due_date", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false })
-        .limit(20);
+        .limit(100);
 
       if (error) {
         console.error("Error fetching tasks:", error);
         throw error;
       }
 
-      console.log("Fetched tasks data:", data);
-      console.log("Current task status filter:", taskStatusFilter);
-      console.log("Number of tasks found:", data?.length || 0);
+      let filteredData = rawData || [];
 
-      setTasks(data || []);
+      // Apply client-side visibility filter for regular employees
+      if (userRole !== "super_admin" && userRole !== "company_admin") {
+        filteredData = filteredData.filter((task: any) => {
+          const title = (task.title || "").toLowerCase();
+          const desc = (task.description || "").toLowerCase();
+          const hasAnyMention = title.includes("@") || desc.includes("@");
+
+          // Broadcast task: no @ in either field — show to everyone
+          if (!hasAnyMention) return true;
+
+          // Check if this employee is @mentioned (in title or description)
+          if (currentEmployeeName) {
+            const nameLower = currentEmployeeName.toLowerCase();
+            if (title.includes(`@${nameLower}`) || desc.includes(`@${nameLower}`)) {
+              return true;
+            }
+          }
+
+          // Directly assigned to this employee
+          if (currentEmployeeId && task.assigned_to === currentEmployeeId) {
+            return true;
+          }
+
+          return false;
+        });
+      }
+
+      // Keep limit at 20 after client-side filter
+      filteredData = filteredData.slice(0, 20);
+
+      console.log("Fetched tasks data:", filteredData);
+      console.log("Current task status filter:", taskStatusFilter);
+      console.log("Number of tasks after filter:", filteredData.length);
+
+      setTasks(filteredData);
     } catch (error) {
       console.error("Error in fetchTasks:", error);
       setTasks([]);
