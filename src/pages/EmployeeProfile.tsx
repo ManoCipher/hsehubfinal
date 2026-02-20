@@ -1105,6 +1105,59 @@ export default function EmployeeProfile() {
         notes.substring(0, 100) + (notes.length > 100 ? "..." : "")
       );
 
+      // Auto-send in-app notifications to @mentioned users on save
+      try {
+        const plainText = (notesTextareaRef.current?.textContent || textContent).toLowerCase();
+        console.log("=== Note mention notification check ===");
+        console.log("Plain text:", plainText);
+
+        // Fetch all team members for this company (fresh fetch to avoid stale state)
+        const { data: allMembers, error: membersError } = await supabase
+          .from("team_members")
+          .select("id, first_name, last_name, user_id, email")
+          .eq("company_id", companyId);
+
+        if (membersError) {
+          console.error("Failed to fetch team members for mention notifications:", membersError);
+        }
+
+        console.log("Team members fetched:", allMembers?.length || 0);
+
+        if (allMembers && allMembers.length > 0) {
+          for (const member of allMembers) {
+            // Skip self-notification
+            if (member.user_id === user?.id) continue;
+            if (!member.user_id) continue;
+
+            const fullName = `${member.first_name} ${member.last_name}`.toLowerCase().trim();
+            const isMentioned = plainText.includes(`@${fullName}`);
+            console.log(`Checking @${fullName}: ${isMentioned}`);
+
+            // Check if the note text contains @fullname
+            if (isMentioned) {
+              const { error: notifError } = await supabase.from("notifications").insert({
+                user_id: member.user_id,
+                company_id: companyId,
+                title: "You were mentioned in a note",
+                message: `${authorName} mentioned you: ${textContent.substring(0, 100)}${textContent.length > 100 ? '...' : ''}`,
+                type: "info",
+                category: "system",
+                is_read: false,
+                related_id: employee?.id,
+              });
+              if (notifError) {
+                console.error("Notification insert error for", member.first_name, ":", notifError);
+              } else {
+                console.log("✅ Notification sent to:", member.first_name, member.last_name);
+              }
+            }
+          }
+        }
+      } catch (notifErr) {
+        console.error("Failed to send mention notifications:", notifErr);
+        // Don't fail the whole save if notification fails
+      }
+
       toast.success("Note added successfully");
       setNotes("");
       // Clear the contentEditable editor
@@ -3863,7 +3916,32 @@ export default function EmployeeProfile() {
                                 Array.isArray(parsedNotes) &&
                                 parsedNotes.length > 0
                               ) {
-                                return parsedNotes.map((note: any) => (
+                                // Resolve current user's team_member row ID for visibility checks
+                                const currentUserTeamMemberId = teamMembers.find(
+                                  (m) => m.user_id === user?.id
+                                )?.id;
+
+                                // Filter notes by visibility:
+                                // - 'everyone' (or missing) → visible to all company members
+                                // - array of team_member IDs → only those members (+ the author)
+                                const visibleNotes = parsedNotes.filter((note: any) => {
+                                  if (!note.visibleTo || note.visibleTo === 'everyone') return true;
+                                  if (note.author_id === user?.id) return true; // author always sees own note
+                                  if (Array.isArray(note.visibleTo) && currentUserTeamMemberId) {
+                                    return note.visibleTo.includes(currentUserTeamMemberId);
+                                  }
+                                  return false;
+                                });
+
+                                if (visibleNotes.length === 0) {
+                                  return (
+                                    <div className="text-center text-muted-foreground py-8 text-sm">
+                                      No notes to display
+                                    </div>
+                                  );
+                                }
+
+                                return visibleNotes.map((note: any) => (
                                   <div key={note.id} className="flex gap-4 p-4 border rounded-lg bg-card hover:bg-accent/50 transition-colors">
                                     {/* Avatar - Larger and more prominent */}
                                     <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 font-semibold text-base">
@@ -3900,6 +3978,16 @@ export default function EmployeeProfile() {
                                               })
                                               : ""}
                                           </span>
+                                          {/* Visibility badge */}
+                                          {note.visibleTo && note.visibleTo !== 'everyone' ? (
+                                            <Badge variant="outline" className="text-xs px-1.5 py-0 border-amber-400 text-amber-600 dark:text-amber-400">
+                                              🔒 Specific users
+                                            </Badge>
+                                          ) : (
+                                            <Badge variant="outline" className="text-xs px-1.5 py-0 border-green-400 text-green-600 dark:text-green-400">
+                                              🌐 Everyone
+                                            </Badge>
+                                          )}
                                         </div>
                                         <Button
                                           variant="ghost"

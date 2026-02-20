@@ -138,8 +138,10 @@ export default function MainLayout({ children }: Props) {
               <Link to="/super-admin/subscriptions" className={getLinkClasses("/super-admin/subscriptions")}>
                 <Package className="w-4 h-4" />
                 <span>Subscriptions & Billing</span>
-              </Link>
-              <Link to="/super-admin/addons" className={getLinkClasses("/super-admin/addons")}>
+              </Link>              <Link to="/super-admin/invoices" className={getLinkClasses("/super-admin/invoices")}>
+                <Receipt className="w-4 h-4" />
+                <span>Invoices</span>
+              </Link>              <Link to="/super-admin/addons" className={getLinkClasses("/super-admin/addons")}>
                 <Puzzle className="w-4 h-4" />
                 <span>Add-ons</span>
               </Link>
@@ -226,6 +228,14 @@ export default function MainLayout({ children }: Props) {
                 <Link to="/reports" className={getLinkClasses("/reports")}>
                   <BarChart className="w-4 h-4" />
                   <span>{t("nav.reports")}</span>
+                </Link>
+              )}
+
+              {/* Invoices & Billing – visible to company_admin or users with settings permission */}
+              {(userRole === "company_admin" || hasPermission("settings")) && (
+                <Link to="/invoices" className={getLinkClasses("/invoices")}>
+                  <Receipt className="w-4 h-4" />
+                  <span>Invoices &amp; Billing</span>
                 </Link>
               )}
 

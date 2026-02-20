@@ -28,23 +28,121 @@ export default function Notifications() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (companyId) {
+        if (companyId && user) {
             fetchNotifications();
         }
-    }, [companyId]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [companyId, user]);
+
+    // Resolve the current user's display name from employees or team_members
+    const resolveUserName = async (): Promise<string | null> => {
+        if (!user?.email || !companyId) return null;
+
+        const { data: emp } = await supabase
+            .from("employees")
+            .select("full_name")
+            .ilike("email", user.email)
+            .eq("company_id", companyId)
+            .maybeSingle();
+        if (emp?.full_name) return emp.full_name;
+
+        const { data: empById } = await supabase
+            .from("employees")
+            .select("full_name")
+            .eq("user_id", user.id)
+            .eq("company_id", companyId)
+            .maybeSingle();
+        if (empById?.full_name) return empById.full_name;
+
+        const { data: member } = await supabase
+            .from("team_members")
+            .select("first_name, last_name")
+            .eq("user_id", user.id)
+            .eq("company_id", companyId)
+            .maybeSingle();
+        if (member) return `${member.first_name} ${member.last_name}`.trim();
+
+        const { data: memberByEmail } = await supabase
+            .from("team_members")
+            .select("first_name, last_name")
+            .ilike("email", user.email)
+            .eq("company_id", companyId)
+            .maybeSingle();
+        if (memberByEmail) return `${memberByEmail.first_name} ${memberByEmail.last_name}`.trim();
+
+        return null;
+    };
+
+    // Fetch tasks that @mention the current user and convert to notification objects
+    const fetchTaskMentionNotifications = async (existingNotifIds: Set<string>): Promise<Notification[]> => {
+        const userName = await resolveUserName();
+        if (!userName) return [];
+
+        const { data: tasks } = await supabase
+            .from("tasks")
+            .select("id, title, description, created_at, status, assigned_to")
+            .eq("company_id", companyId)
+            .order("created_at", { ascending: false })
+            .limit(200);
+
+        if (!tasks) return [];
+
+        const nameLower = userName.toLowerCase();
+        const taskNotifications: Notification[] = [];
+
+        for (const task of tasks) {
+            if (existingNotifIds.has(task.id)) continue;
+
+            const title = (task.title || "").toLowerCase();
+            const desc = (task.description || "").toLowerCase();
+            const isMentioned = title.includes(`@${nameLower}`) || desc.includes(`@${nameLower}`);
+
+            if (isMentioned) {
+                taskNotifications.push({
+                    id: `task-mention-${task.id}`,
+                    title: "You were mentioned in a task",
+                    message: `Task: "${task.title}"`,
+                    category: "task",
+                    type: "info",
+                    is_read: task.status === "completed",
+                    created_at: task.created_at,
+                    related_id: task.id,
+                });
+            }
+        }
+
+        return taskNotifications;
+    };
 
     const fetchNotifications = async () => {
         setLoading(true);
         try {
+            // 1. Fetch real DB notifications
             const { data, error } = await supabase
                 .from("notifications")
                 .select("*")
                 .eq("company_id", companyId)
+                .eq("user_id", user?.id)
                 .order("created_at", { ascending: false });
 
             if (error) throw error;
 
-            setNotifications(data || []);
+            const dbNotifications: Notification[] = data || [];
+
+            // 2. Collect related_ids to avoid duplicates
+            const existingTaskIds = new Set<string>();
+            for (const n of dbNotifications) {
+                if (n.related_id) existingTaskIds.add(n.related_id);
+            }
+
+            // 3. Fetch task @mention notifications
+            const taskMentionNotifs = await fetchTaskMentionNotifications(existingTaskIds);
+
+            // 4. Merge and sort
+            const merged = [...dbNotifications, ...taskMentionNotifs]
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+            setNotifications(merged);
         } catch (error) {
             console.error("Error fetching notifications:", error);
             toast.error("Failed to load notifications");
@@ -54,6 +152,13 @@ export default function Notifications() {
     };
 
     const markAsRead = async (id: string) => {
+        // Synthetic task-mention notifications are not in the DB
+        if (id.startsWith("task-mention-")) {
+            setNotifications((prev) =>
+                prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+            );
+            return;
+        }
         try {
             const { error } = await supabase
                 .from("notifications")
@@ -76,6 +181,7 @@ export default function Notifications() {
                 .from("notifications")
                 .update({ is_read: true })
                 .eq("company_id", companyId)
+                .eq("user_id", user?.id)
                 .eq("is_read", false);
 
             if (error) throw error;
@@ -88,6 +194,12 @@ export default function Notifications() {
     };
 
     const deleteNotification = async (id: string) => {
+        // Synthetic task-mention notifications — just remove from UI
+        if (id.startsWith("task-mention-")) {
+            setNotifications((prev) => prev.filter((n) => n.id !== id));
+            toast.success("Notification dismissed");
+            return;
+        }
         try {
             const { error } = await supabase
                 .from("notifications")

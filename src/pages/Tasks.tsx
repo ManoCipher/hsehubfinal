@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, Search, Calendar as CalendarIcon } from "lucide-react";
@@ -81,6 +81,12 @@ export default function Tasks() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
 
+  // @mention state
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+  const [mentionStartIndex, setMentionStartIndex] = useState(-1);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   const form = useForm<TaskFormData>({
     resolver: zodResolver(taskSchema),
     defaultValues: {
@@ -135,19 +141,70 @@ export default function Tasks() {
     if (!companyId) return;
 
     try {
-      const { error } = await supabase.from("tasks").insert([
-        {
-          title: data.title,
-          description: data.description,
-          assigned_to: data.assigned_to,
-          priority: data.priority,
-          status: data.status,
-          due_date: data.due_date,
-          company_id: companyId,
-        },
-      ]);
+      // Insert task and get the created record back
+      const { data: insertedRows, error } = await supabase
+        .from("tasks")
+        .insert([
+          {
+            title: data.title,
+            description: data.description,
+            assigned_to: data.assigned_to,
+            priority: data.priority,
+            status: data.status,
+            due_date: data.due_date,
+            company_id: companyId,
+          },
+        ])
+        .select("id, title, description")
+        .single();
 
       if (error) throw error;
+
+      // ── Get sender display name ───────────────────────────────────────────
+      let senderName = user?.email || "Someone";
+      if (user?.email) {
+        const { data: senderEmp } = await supabase
+          .from("employees")
+          .select("full_name")
+          .ilike("email", user.email)
+          .eq("company_id", companyId)
+          .maybeSingle();
+        if (senderEmp?.full_name) {
+          senderName = senderEmp.full_name;
+        } else {
+          const { data: senderMember } = await supabase
+            .from("team_members")
+            .select("first_name, last_name")
+            .ilike("email", user.email)
+            .eq("company_id", companyId)
+            .maybeSingle();
+          if (senderMember) {
+            senderName = `${senderMember.first_name} ${senderMember.last_name}`.trim();
+          }
+        }
+      }
+
+      // ── Send mention + assignment notifications via SECURITY DEFINER RPC ──
+      // This runs server-side bypassing all RLS, so it can always find users
+      // regardless of which table (employees vs team_members) they live in.
+      const combinedText = `${insertedRows.title || ""} ${insertedRows.description || ""}`;
+      const { data: notifCount, error: notifErr } = await supabase.rpc(
+        "notify_task_mentions",
+        {
+          p_company_id:  companyId,
+          p_task_id:     insertedRows.id,
+          p_task_title:  insertedRows.title,
+          p_task_text:   combinedText,
+          p_sender_name: senderName,
+          p_assigned_to: data.assigned_to ?? null,
+        }
+      );
+      if (notifErr) {
+        console.error("❌ Task notification RPC error:", notifErr);
+      } else {
+        console.log(`✅ Task notifications sent: ${notifCount}`);
+      }
+      // ─────────────────────────────────────────────────────────────────────
 
       toast({ title: "Success", description: "Task created successfully" });
       setIsDialogOpen(false);
@@ -167,6 +224,47 @@ export default function Tasks() {
 
   const filteredTasks = tasks.filter((task) =>
     task.title.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // @mention autocomplete handlers
+  const handleDescriptionChange = (
+    value: string,
+    onChange: (val: string) => void
+  ) => {
+    onChange(value);
+    const cursorPos = textareaRef.current?.selectionStart ?? value.length;
+    const textBeforeCursor = value.substring(0, cursorPos);
+    const atIndex = textBeforeCursor.lastIndexOf("@");
+    if (atIndex !== -1) {
+      const textAfterAt = textBeforeCursor.substring(atIndex + 1);
+      if (!textAfterAt.includes(" ") && !textAfterAt.includes("\n")) {
+        setMentionQuery(textAfterAt);
+        setMentionStartIndex(atIndex);
+        setShowMentionDropdown(true);
+        return;
+      }
+    }
+    setShowMentionDropdown(false);
+  };
+
+  const selectMention = (
+    employee: Tables<"employees">,
+    currentValue: string,
+    onChange: (val: string) => void
+  ) => {
+    const before = currentValue.substring(0, mentionStartIndex);
+    const after = currentValue.substring(
+      mentionStartIndex + 1 + mentionQuery.length
+    );
+    const newValue = `${before}@${employee.full_name} ${after}`;
+    onChange(newValue);
+    setShowMentionDropdown(false);
+    setMentionQuery("");
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  };
+
+  const filteredMentions = employees.filter((emp) =>
+    emp.full_name.toLowerCase().includes(mentionQuery.toLowerCase())
   );
 
   if (loading || loadingData) {
@@ -268,9 +366,53 @@ export default function Tasks() {
                         name="description"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Description</FormLabel>
+                            <FormLabel>
+                              Description{" "}
+                              <span className="text-xs text-muted-foreground font-normal">
+                                (type @ to mention an employee — mentioned person sees this task only)
+                              </span>
+                            </FormLabel>
                             <FormControl>
-                              <Textarea {...field} rows={3} />
+                              <div className="relative">
+                                <Textarea
+                                  {...field}
+                                  ref={textareaRef}
+                                  rows={3}
+                                  value={field.value ?? ""}
+                                  onChange={(e) =>
+                                    handleDescriptionChange(
+                                      e.target.value,
+                                      field.onChange
+                                    )
+                                  }
+                                  placeholder="Describe the task... Use @Name to assign visibility to a specific person"
+                                />
+                                {showMentionDropdown &&
+                                  filteredMentions.length > 0 && (
+                                    <div className="absolute z-50 w-64 bg-popover border border-border rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto">
+                                      {filteredMentions.map((emp) => (
+                                        <button
+                                          key={emp.id}
+                                          type="button"
+                                          className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors flex items-center gap-2"
+                                          onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            selectMention(
+                                              emp,
+                                              field.value ?? "",
+                                              field.onChange
+                                            );
+                                          }}
+                                        >
+                                          <span className="w-6 h-6 rounded-full bg-primary/20 text-primary text-xs flex items-center justify-center font-medium">
+                                            {emp.full_name.charAt(0).toUpperCase()}
+                                          </span>
+                                          {emp.full_name}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                              </div>
                             </FormControl>
                             <FormMessage />
                           </FormItem>
