@@ -37,6 +37,7 @@ import {
   Eye,
   EyeOff,
   Copy,
+  Receipt,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -210,6 +211,9 @@ export default function Settings() {
   });
   const [isAddingSystem, setIsAddingSystem] = useState(false);
 
+  // Recent Invoices State
+  const [recentInvoices, setRecentInvoices] = useState<any[]>([]);
+
 
   const predefinedISOs = [
     {
@@ -322,8 +326,27 @@ export default function Settings() {
       fetchMyTickets();
       fetchApiToken();
       fetchExternalSystems();
+      fetchRecentInvoices();
     }
   }, [user, loading, navigate, companyId]);
+
+  const fetchRecentInvoices = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("invoices")
+        .select("invoice_number, created_at, total, status, currency")
+        .order("created_at", { ascending: false })
+        .limit(4);
+
+      if (error) {
+        console.error("Error fetching recent invoices:", error);
+        return;
+      }
+      setRecentInvoices(data || []);
+    } catch (err) {
+      console.error("Error fetching recent invoices:", err);
+    }
+  };
 
   const fetchAllData = async () => {
     if (!companyId) return;
@@ -3014,6 +3037,22 @@ export default function Settings() {
                       <div>{t("settings.apiIntegration")}</div>
                       <div className="text-xs opacity-80">
                         {t("settings.apiIntegrationNav")}
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab("invoices-billing")}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "invoices-billing"
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted text-muted-foreground"
+                      }`}
+                  >
+                    <Receipt className="w-4 h-4" />
+                    <div className="text-left">
+                      <div>Invoices & Billing</div>
+                      <div className="text-xs opacity-80">
+                        Manage subscriptions
                       </div>
                     </div>
                   </button>
@@ -5731,7 +5770,70 @@ export default function Settings() {
               </TabsContent>
 
 
-              {/* Tab 8: Support */}
+              {/* Tab 8: Invoices & Billing */}
+              <TabsContent value="invoices-billing">
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2">
+                          <Receipt className="w-5 h-5" />
+                          Invoices & Billing
+                        </CardTitle>
+                        <CardDescription>
+                          View your recent invoices and billing information
+                        </CardDescription>
+                      </div>
+                      <Button onClick={() => navigate("/invoices")} variant="outline">
+                        <Receipt className="w-4 h-4 mr-2" />
+                        View All Invoices
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {recentInvoices.length > 0 ? (
+                        <div className="rounded-md border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-muted/50">
+                                <TableHead>Invoice #</TableHead>
+                                <TableHead>Date</TableHead>
+                                <TableHead className="text-right">Amount</TableHead>
+                                <TableHead>Status</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {recentInvoices.map((invoice: any) => (
+                                <TableRow key={invoice.invoice_number}>
+                                  <TableCell className="font-mono text-sm">{invoice.invoice_number}</TableCell>
+                                  <TableCell>{new Date(invoice.created_at).toLocaleDateString()}</TableCell>
+                                  <TableCell className="text-right font-semibold">
+                                    {invoice.currency === "USD" ? "$" : invoice.currency === "EUR" ? "€" : ""}
+                                    {invoice.total.toFixed(2)}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant={invoice.status === "paid" ? "default" : invoice.status === "pending" ? "secondary" : "destructive"}>
+                                      {invoice.status}
+                                    </Badge>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      ) : (
+                        <div className="p-6 border rounded-lg bg-muted/30 text-center">
+                          <Receipt className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+                          <p className="text-muted-foreground">No recent invoices available.</p>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Tab 9: Support */}
               <TabsContent value="support">
                 <div className="space-y-6">
                   {/* Submit Ticket Card */}
