@@ -82,6 +82,16 @@ const formatLogDescription = (log: any) => {
             return `Updated incident: ${target}`;
         case "delete_incident":
             return `Deleted incident record`;
+        case "assign_task":
+            return `Created/assigned task: ${target}`;
+        case "complete_task":
+            return `Completed task: ${target}`;
+        case "reopen_task":
+            return `Reopened task: ${target}`;
+        case "create_audit":
+            return `Created audit: ${target} (${details.iso_code || "Unknown Standard"})`;
+        case "delete_audit":
+            return `Deleted audit: ${target}`;
         case "update_custom_reports":
             return `Updated custom reports configuration (${details.count || 0} reports)`;
         case "block_company":

@@ -39,6 +39,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuditLog } from "@/hooks/useAuditLog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,6 +57,7 @@ export default function Audits() {
   const { hasDetailedPermission } = usePermissions();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { logAction } = useAuditLog();
 
   const [audits, setAudits] = useState<any[]>([]);
   const [isoStandards, setIsoStandards] = useState<any[]>([]);
@@ -179,6 +181,19 @@ export default function Audits() {
 
       // Generate checklist items from ISO criteria
       await generateChecklistItems(auditData.id, formData.iso_code);
+
+      // Log audit action
+      logAction({
+        action: "create_audit",
+        targetType: "audit",
+        targetId: auditData.id,
+        targetName: formData.title,
+        details: {
+          iso_code: formData.iso_code,
+          scheduled_date: formData.scheduled_date,
+          responsible_person_id: formData.responsible_person_id
+        }
+      });
 
       toast({
         title: "Success",
@@ -327,6 +342,15 @@ export default function Audits() {
         .eq("id", deleteAudit.id);
 
       if (error) throw error;
+
+      // Log audit deletion
+      logAction({
+        action: "delete_audit",
+        targetType: "audit",
+        targetId: deleteAudit.id,
+        targetName: deleteAudit.title,
+        details: { iso_code: deleteAudit.iso_code }
+      });
 
       toast({
         title: "Success",

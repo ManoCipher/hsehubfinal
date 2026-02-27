@@ -44,6 +44,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuditLog } from "@/hooks/useAuditLog";
 import type { Tables } from "@/integrations/supabase/types";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -72,6 +73,7 @@ export default function Tasks() {
   const { user, loading, companyId } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { logAction } = useAuditLog();
   type TaskWithJoins = Tables<"tasks"> & {
     employees?: { full_name: string } | null;
   };
@@ -205,6 +207,20 @@ export default function Tasks() {
         console.log(`✅ Task notifications sent: ${notifCount}`);
       }
       // ─────────────────────────────────────────────────────────────────────
+
+      // Log audit action for task creation
+      logAction({
+        action: "assign_task",
+        targetType: "task",
+        targetId: insertedRows.id,
+        targetName: insertedRows.title,
+        details: {
+          assignee_id: data.assigned_to,
+          priority: data.priority,
+          status: data.status,
+          due_date: data.due_date
+        }
+      });
 
       toast({ title: "Success", description: "Task created successfully" });
       setIsDialogOpen(false);
