@@ -29,7 +29,7 @@ import {
 import { Responsive, WidthProvider } from "react-grid-layout/legacy";
 import "react-grid-layout/css/styles.css";
 
-// Wrap ResponsiveGridLayout with WidthProvider - measureBeforeMount prevents 0-width flash
+// Wrap ResponsiveGridLayout with WidthProvider
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
 import { Button } from "@/components/ui/button";
@@ -1524,16 +1524,18 @@ function OverviewSection({
 
   // Mounted state to suppress CSS transition glitch on first render
   const [isMounted, setIsMounted] = useState(false);
+  const isInitialMountRef = useRef(true);
   const isDraggingRef = useRef(false);
   const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
+  const layoutsRef = useRef<{ [key: string]: any[] }>({});
+  const hiddenCardsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     // Small delay to let the grid measure its container width before enabling transitions
     const timer = setTimeout(() => {
       setIsMounted(true);
-      // Trigger a resize so WidthProvider recalculates container width
-      window.dispatchEvent(new Event('resize'));
-    }, 150);
+      isInitialMountRef.current = false;
+    }, 200);
     return () => clearTimeout(timer);
   }, []);
 
@@ -1568,6 +1570,15 @@ function OverviewSection({
       return next;
     });
   }, []);
+
+  // Reset initial mount flag when hiddenCards changes (grid will remount with new key)
+  useEffect(() => {
+    isInitialMountRef.current = true;
+    const timer = setTimeout(() => {
+      isInitialMountRef.current = false;
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [hiddenCards]);
 
   // Standard card base positions (y offsets for lg)
   const standardCardDefaults = useMemo(() => ({
@@ -1715,20 +1726,49 @@ function OverviewSection({
     });
   }, [customReports, standardCardDefaults]);
 
+  // Keep refs in sync with state to avoid dependency issues in callbacks
+  useEffect(() => {
+    layoutsRef.current = layouts;
+  }, [layouts]);
+
+  useEffect(() => {
+    hiddenCardsRef.current = hiddenCards;
+  }, [hiddenCards]);
+
   // Save layouts to localStorage when they change (deferred during drag)
   const lastSavedLayoutRef = useRef<string>('');
   
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
+    // Skip processing during initial mount to avoid infinite loop
+    if (isInitialMountRef.current) return;
+    
     if (isDraggingRef.current) {
       // During drag, just store the pending layout but don't save yet
       pendingLayoutRef.current = allLayouts;
       return;
     }
+    
     // NOTE: Do NOT call setLayouts here — doing so triggers a re-render which causes
     // ResponsiveGridLayout to fire onLayoutChange again, creating an infinite loop.
     // Layout state is only updated on drag stop / resize stop.
     // Just persist to localStorage if something changed.
-    const serialized = JSON.stringify(allLayouts);
+    
+    // IMPORTANT: Merge with existing layouts to preserve hidden cards' positions
+    // allLayouts only contains visible cards, so we need to add back hidden ones
+    const mergedLayouts: { [key: string]: any[] } = {};
+    const currentLayouts = layoutsRef.current;
+    const currentHiddenCards = hiddenCardsRef.current;
+    
+    Object.keys(currentLayouts).forEach(bp => {
+      // Get current visible layout from allLayouts
+      const visibleLayout = allLayouts[bp] || [];
+      // Get hidden cards' positions from existing layouts
+      const hiddenLayout = (currentLayouts[bp] || []).filter((item: any) => currentHiddenCards.has(item.i));
+      // Merge both
+      mergedLayouts[bp] = [...visibleLayout, ...hiddenLayout];
+    });
+    
+    const serialized = JSON.stringify(mergedLayouts);
     if (serialized === lastSavedLayoutRef.current) return;
     lastSavedLayoutRef.current = serialized;
     try {
@@ -1747,9 +1787,20 @@ function OverviewSection({
     isDraggingRef.current = false;
     // Apply the pending layout that accumulated during drag
     if (pendingLayoutRef.current) {
-      const serialized = JSON.stringify(pendingLayoutRef.current);
+      // Merge with hidden cards to preserve their positions
+      const mergedLayouts: { [key: string]: any[] } = {};
+      const currentLayouts = layoutsRef.current;
+      const currentHiddenCards = hiddenCardsRef.current;
+      
+      Object.keys(currentLayouts).forEach(bp => {
+        const visibleLayout = pendingLayoutRef.current![bp] || [];
+        const hiddenLayout = (currentLayouts[bp] || []).filter((item: any) => currentHiddenCards.has(item.i));
+        mergedLayouts[bp] = [...visibleLayout, ...hiddenLayout];
+      });
+      
+      const serialized = JSON.stringify(mergedLayouts);
       lastSavedLayoutRef.current = serialized;
-      setLayouts(pendingLayoutRef.current);
+      setLayouts(mergedLayouts);
       try {
         localStorage.setItem(UNIFIED_LAYOUT_KEY, serialized);
       } catch (error) {
@@ -1761,12 +1812,19 @@ function OverviewSection({
 
   const handleResizeStop = useCallback((layout: any[], oldItem: any, newItem: any, placeholder: any, e: any, element: any) => {
     // On resize stop, update state using updater form (no stale closure on `layouts`)
+    const currentHiddenCards = hiddenCardsRef.current;
+    
     setLayouts(prev => {
       const updated = { ...prev };
-      // Match the breakpoint by layout length
+      // Match the breakpoint by layout length and merge with hidden cards
       Object.keys(updated).forEach(bp => {
-        if (updated[bp].length === layout.length) {
-          updated[bp] = layout;
+        const visibleCount = layout.filter(item => !currentHiddenCards.has(item.i)).length;
+        const prevVisibleCount = (updated[bp] || []).filter((item: any) => !currentHiddenCards.has(item.i)).length;
+        
+        if (visibleCount === prevVisibleCount) {
+          // This is the matching breakpoint
+          const hiddenLayout = (updated[bp] || []).filter((item: any) => currentHiddenCards.has(item.i));
+          updated[bp] = [...layout, ...hiddenLayout];
         }
       });
       const serialized = JSON.stringify(updated);
@@ -1877,6 +1935,7 @@ function OverviewSection({
 
       {/* Unified Resizable/Draggable Grid Layout (standard + custom cards together) */}
       <ResponsiveGridLayout
+        key={Array.from(hiddenCards).sort().join(',')}
         className={`layout${isMounted ? '' : ' no-transition'}`}
         layouts={visibleLayouts}
         breakpoints={{ lg: 1200, md: 996, sm: 768 }}
@@ -2131,6 +2190,16 @@ function DraggableGridSection({
   children,
 }: DraggableGridSectionProps) {
   const { toast } = useToast();
+  const isInitialMountRef = useRef(true);
+  const isDraggingRef = useRef(false);
+  const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
+  const lastSavedLayoutRef = useRef<string>('');
+  
+  useEffect(() => {
+    const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
+    return () => clearTimeout(timer);
+  }, []);
+  
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
     try {
       const saved = localStorage.getItem(SECTION_LAYOUT_KEYS[sectionId as keyof typeof SECTION_LAYOUT_KEYS]);
@@ -2145,15 +2214,58 @@ function DraggableGridSection({
 
   const handleLayoutChange = useCallback(
     (currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
-      setLayouts(allLayouts);
+      if (isInitialMountRef.current) return;
+      if (isDraggingRef.current) {
+        pendingLayoutRef.current = allLayouts;
+        return;
+      }
+      // Only persist if actually changed
+      const serialized = JSON.stringify(allLayouts);
+      if (serialized === lastSavedLayoutRef.current) return;
+      lastSavedLayoutRef.current = serialized;
       try {
-        localStorage.setItem(SECTION_LAYOUT_KEYS[sectionId as keyof typeof SECTION_LAYOUT_KEYS], JSON.stringify(allLayouts));
+        localStorage.setItem(SECTION_LAYOUT_KEYS[sectionId as keyof typeof SECTION_LAYOUT_KEYS], serialized);
       } catch (error) {
         console.error(`Error saving ${sectionId} layout:`, error);
       }
     },
     [sectionId]
   );
+
+  const handleDragStart = useCallback(() => {
+    isDraggingRef.current = true;
+  }, []);
+
+  const handleDragStop = useCallback(() => {
+    isDraggingRef.current = false;
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try {
+        localStorage.setItem(SECTION_LAYOUT_KEYS[sectionId as keyof typeof SECTION_LAYOUT_KEYS], serialized);
+      } catch (error) {
+        console.error(`Error saving ${sectionId} layout:`, error);
+      }
+      pendingLayoutRef.current = null;
+    }
+  }, [sectionId]);
+
+  const handleResizeStop = useCallback(() => {
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try {
+        localStorage.setItem(SECTION_LAYOUT_KEYS[sectionId as keyof typeof SECTION_LAYOUT_KEYS], serialized);
+      } catch (error) {
+        console.error(`Error saving ${sectionId} layout:`, error);
+      }
+      pendingLayoutRef.current = null;
+    }
+  }, [sectionId]);
 
   // Reset layout to default
   const onResetLayout = useCallback(() => {
@@ -2205,6 +2317,9 @@ function DraggableGridSection({
         preventCollision={false}
         autoSize={true}
         onLayoutChange={handleLayoutChange}
+        onDragStart={handleDragStart}
+        onDragStop={handleDragStop}
+        onResizeStop={handleResizeStop}
         draggableHandle=".drag-handle"
         isResizable={true}
         isDraggable={true}
@@ -2346,9 +2461,18 @@ function KPICard({
 // Sections with draggable card layouts
 function RiskAssessmentsSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
   const { toast } = useToast();
+  const isInitialMountRef = useRef(true);
+  const isDraggingRef = useRef(false);
+  const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
+  const lastSavedLayoutRef = useRef<string>('');
   const defaultLayout = [
     { i: "risk-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
   ];
+
+  useEffect(() => {
+    const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
     try {
@@ -2361,11 +2485,41 @@ function RiskAssessmentsSection({ stats, chartData }: { stats: ReportStats; char
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
-    setLayouts(allLayouts);
+    if (isInitialMountRef.current) return;
+    if (isDraggingRef.current) {
+      pendingLayoutRef.current = allLayouts;
+      return;
+    }
+    const serialized = JSON.stringify(allLayouts);
+    if (serialized === lastSavedLayoutRef.current) return;
+    lastSavedLayoutRef.current = serialized;
     try {
-      localStorage.setItem('hse_layout_risk_assessments', JSON.stringify(allLayouts));
+      localStorage.setItem('hse_layout_risk_assessments', serialized);
     } catch (error) {
       console.error('Error saving risk assessments layout:', error);
+    }
+  }, []);
+
+  const handleDragStart = useCallback(() => { isDraggingRef.current = true; }, []);
+  const handleDragStop = useCallback(() => {
+    isDraggingRef.current = false;
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_risk_assessments', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+  const handleResizeStop = useCallback(() => {
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_risk_assessments', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
     }
   }, []);
 
@@ -2396,6 +2550,9 @@ function RiskAssessmentsSection({ stats, chartData }: { stats: ReportStats; char
         cols={{ lg: 12, md: 10, sm: 6 }}
         rowHeight={70}
         onLayoutChange={handleLayoutChange}
+        onDragStart={handleDragStart}
+        onDragStop={handleDragStop}
+        onResizeStop={handleResizeStop}
         draggableHandle=".drag-handle"
         isResizable={true}
         isDraggable={true}
@@ -2419,10 +2576,19 @@ function RiskAssessmentsSection({ stats, chartData }: { stats: ReportStats; char
 
 function AuditsSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
   const { toast } = useToast();
+  const isInitialMountRef = useRef(true);
+  const isDraggingRef = useRef(false);
+  const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
+  const lastSavedLayoutRef = useRef<string>('');
   const defaultLayout = [
     { i: "audit-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
     { i: "audit-completed", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
   ];
+
+  useEffect(() => {
+    const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
     try {
@@ -2435,11 +2601,41 @@ function AuditsSection({ stats, chartData }: { stats: ReportStats; chartData: an
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
-    setLayouts(allLayouts);
+    if (isInitialMountRef.current) return;
+    if (isDraggingRef.current) {
+      pendingLayoutRef.current = allLayouts;
+      return;
+    }
+    const serialized = JSON.stringify(allLayouts);
+    if (serialized === lastSavedLayoutRef.current) return;
+    lastSavedLayoutRef.current = serialized;
     try {
-      localStorage.setItem('hse_layout_audits', JSON.stringify(allLayouts));
+      localStorage.setItem('hse_layout_audits', serialized);
     } catch (error) {
       console.error('Error saving audits layout:', error);
+    }
+  }, []);
+
+  const handleDragStart = useCallback(() => { isDraggingRef.current = true; }, []);
+  const handleDragStop = useCallback(() => {
+    isDraggingRef.current = false;
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_audits', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+  const handleResizeStop = useCallback(() => {
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_audits', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
     }
   }, []);
 
@@ -2470,6 +2666,9 @@ function AuditsSection({ stats, chartData }: { stats: ReportStats; chartData: an
         cols={{ lg: 12, md: 10, sm: 6 }}
         rowHeight={70}
         onLayoutChange={handleLayoutChange}
+        onDragStart={handleDragStart}
+        onDragStop={handleDragStop}
+        onResizeStop={handleResizeStop}
         draggableHandle=".drag-handle"
         isResizable={true}
         isDraggable={true}
@@ -2502,11 +2701,20 @@ function AuditsSection({ stats, chartData }: { stats: ReportStats; chartData: an
 
 function IncidentsSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
   const { toast } = useToast();
+  const isInitialMountRef = useRef(true);
+  const isDraggingRef = useRef(false);
+  const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
+  const lastSavedLayoutRef = useRef<string>('');
   const defaultLayout = [
     { i: "incident-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
     { i: "incident-open", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
     { i: "incident-closed", x: 6, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
   ];
+
+  useEffect(() => {
+    const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
     try {
@@ -2519,11 +2727,41 @@ function IncidentsSection({ stats, chartData }: { stats: ReportStats; chartData:
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
-    setLayouts(allLayouts);
+    if (isInitialMountRef.current) return;
+    if (isDraggingRef.current) {
+      pendingLayoutRef.current = allLayouts;
+      return;
+    }
+    const serialized = JSON.stringify(allLayouts);
+    if (serialized === lastSavedLayoutRef.current) return;
+    lastSavedLayoutRef.current = serialized;
     try {
-      localStorage.setItem('hse_layout_incidents', JSON.stringify(allLayouts));
+      localStorage.setItem('hse_layout_incidents', serialized);
     } catch (error) {
       console.error('Error saving incidents layout:', error);
+    }
+  }, []);
+
+  const handleDragStart = useCallback(() => { isDraggingRef.current = true; }, []);
+  const handleDragStop = useCallback(() => {
+    isDraggingRef.current = false;
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_incidents', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+  const handleResizeStop = useCallback(() => {
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_incidents', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
     }
   }, []);
 
@@ -2554,6 +2792,9 @@ function IncidentsSection({ stats, chartData }: { stats: ReportStats; chartData:
         cols={{ lg: 12, md: 10, sm: 6 }}
         rowHeight={70}
         onLayoutChange={handleLayoutChange}
+        onDragStart={handleDragStart}
+        onDragStop={handleDragStop}
+        onResizeStop={handleResizeStop}
         draggableHandle=".drag-handle"
         isResizable={true}
         isDraggable={true}
@@ -2603,10 +2844,19 @@ function TrainingsSection({
   chartData: any[];
 }) {
   const { toast } = useToast();
+  const isInitialMountRef = useRef(true);
+  const isDraggingRef = useRef(false);
+  const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
+  const lastSavedLayoutRef = useRef<string>('');
   const defaultLayout = [
     { i: "training-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
     { i: "training-compliance", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
   ];
+
+  useEffect(() => {
+    const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
     try {
@@ -2619,11 +2869,41 @@ function TrainingsSection({
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
-    setLayouts(allLayouts);
+    if (isInitialMountRef.current) return;
+    if (isDraggingRef.current) {
+      pendingLayoutRef.current = allLayouts;
+      return;
+    }
+    const serialized = JSON.stringify(allLayouts);
+    if (serialized === lastSavedLayoutRef.current) return;
+    lastSavedLayoutRef.current = serialized;
     try {
-      localStorage.setItem('hse_layout_trainings', JSON.stringify(allLayouts));
+      localStorage.setItem('hse_layout_trainings', serialized);
     } catch (error) {
       console.error('Error saving trainings layout:', error);
+    }
+  }, []);
+
+  const handleDragStart = useCallback(() => { isDraggingRef.current = true; }, []);
+  const handleDragStop = useCallback(() => {
+    isDraggingRef.current = false;
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_trainings', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+  const handleResizeStop = useCallback(() => {
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_trainings', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
     }
   }, []);
 
@@ -2659,6 +2939,9 @@ function TrainingsSection({
         cols={{ lg: 12, md: 10, sm: 6 }}
         rowHeight={70}
         onLayoutChange={handleLayoutChange}
+        onDragStart={handleDragStart}
+        onDragStop={handleDragStop}
+        onResizeStop={handleResizeStop}
         draggableHandle=".drag-handle"
         isResizable={true}
         isDraggable={true}
@@ -2757,11 +3040,20 @@ function TrainingsSection({
 
 function MeasuresSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
   const { toast } = useToast();
+  const isInitialMountRef = useRef(true);
+  const isDraggingRef = useRef(false);
+  const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
+  const lastSavedLayoutRef = useRef<string>('');
   const defaultLayout = [
     { i: "measures-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
     { i: "measures-completed", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
     { i: "measures-progress", x: 6, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
   ];
+
+  useEffect(() => {
+    const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
     try {
@@ -2774,11 +3066,41 @@ function MeasuresSection({ stats, chartData }: { stats: ReportStats; chartData: 
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
-    setLayouts(allLayouts);
+    if (isInitialMountRef.current) return;
+    if (isDraggingRef.current) {
+      pendingLayoutRef.current = allLayouts;
+      return;
+    }
+    const serialized = JSON.stringify(allLayouts);
+    if (serialized === lastSavedLayoutRef.current) return;
+    lastSavedLayoutRef.current = serialized;
     try {
-      localStorage.setItem('hse_layout_measures', JSON.stringify(allLayouts));
+      localStorage.setItem('hse_layout_measures', serialized);
     } catch (error) {
       console.error('Error saving measures layout:', error);
+    }
+  }, []);
+
+  const handleDragStart = useCallback(() => { isDraggingRef.current = true; }, []);
+  const handleDragStop = useCallback(() => {
+    isDraggingRef.current = false;
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_measures', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+  const handleResizeStop = useCallback(() => {
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_measures', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
     }
   }, []);
 
@@ -2809,6 +3131,9 @@ function MeasuresSection({ stats, chartData }: { stats: ReportStats; chartData: 
         cols={{ lg: 12, md: 10, sm: 6 }}
         rowHeight={70}
         onLayoutChange={handleLayoutChange}
+        onDragStart={handleDragStart}
+        onDragStop={handleDragStop}
+        onResizeStop={handleResizeStop}
         draggableHandle=".drag-handle"
         isResizable={true}
         isDraggable={true}
@@ -2850,10 +3175,19 @@ function MeasuresSection({ stats, chartData }: { stats: ReportStats; chartData: 
 
 function TasksSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
   const { toast } = useToast();
+  const isInitialMountRef = useRef(true);
+  const isDraggingRef = useRef(false);
+  const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
+  const lastSavedLayoutRef = useRef<string>('');
   const defaultLayout = [
     { i: "tasks-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
     { i: "tasks-completed", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
   ];
+
+  useEffect(() => {
+    const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
     try {
@@ -2866,11 +3200,41 @@ function TasksSection({ stats, chartData }: { stats: ReportStats; chartData: any
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
-    setLayouts(allLayouts);
+    if (isInitialMountRef.current) return;
+    if (isDraggingRef.current) {
+      pendingLayoutRef.current = allLayouts;
+      return;
+    }
+    const serialized = JSON.stringify(allLayouts);
+    if (serialized === lastSavedLayoutRef.current) return;
+    lastSavedLayoutRef.current = serialized;
     try {
-      localStorage.setItem('hse_layout_tasks', JSON.stringify(allLayouts));
+      localStorage.setItem('hse_layout_tasks', serialized);
     } catch (error) {
       console.error('Error saving tasks layout:', error);
+    }
+  }, []);
+
+  const handleDragStart = useCallback(() => { isDraggingRef.current = true; }, []);
+  const handleDragStop = useCallback(() => {
+    isDraggingRef.current = false;
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_tasks', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+  const handleResizeStop = useCallback(() => {
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_tasks', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
     }
   }, []);
 
@@ -2901,6 +3265,9 @@ function TasksSection({ stats, chartData }: { stats: ReportStats; chartData: any
         cols={{ lg: 12, md: 10, sm: 6 }}
         rowHeight={70}
         onLayoutChange={handleLayoutChange}
+        onDragStart={handleDragStart}
+        onDragStop={handleDragStop}
+        onResizeStop={handleResizeStop}
         draggableHandle=".drag-handle"
         isResizable={true}
         isDraggable={true}
@@ -2933,9 +3300,18 @@ function TasksSection({ stats, chartData }: { stats: ReportStats; chartData: any
 
 function CheckupsSection({ stats }: { stats: ReportStats }) {
   const { toast } = useToast();
+  const isInitialMountRef = useRef(true);
+  const isDraggingRef = useRef(false);
+  const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
+  const lastSavedLayoutRef = useRef<string>('');
   const defaultLayout = [
     { i: "checkups-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
   ];
+
+  useEffect(() => {
+    const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
     try {
@@ -2948,11 +3324,41 @@ function CheckupsSection({ stats }: { stats: ReportStats }) {
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
-    setLayouts(allLayouts);
+    if (isInitialMountRef.current) return;
+    if (isDraggingRef.current) {
+      pendingLayoutRef.current = allLayouts;
+      return;
+    }
+    const serialized = JSON.stringify(allLayouts);
+    if (serialized === lastSavedLayoutRef.current) return;
+    lastSavedLayoutRef.current = serialized;
     try {
-      localStorage.setItem('hse_layout_checkups', JSON.stringify(allLayouts));
+      localStorage.setItem('hse_layout_checkups', serialized);
     } catch (error) {
       console.error('Error saving checkups layout:', error);
+    }
+  }, []);
+
+  const handleDragStart = useCallback(() => { isDraggingRef.current = true; }, []);
+  const handleDragStop = useCallback(() => {
+    isDraggingRef.current = false;
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_checkups', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+  const handleResizeStop = useCallback(() => {
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_checkups', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
     }
   }, []);
 
@@ -2983,6 +3389,9 @@ function CheckupsSection({ stats }: { stats: ReportStats }) {
         cols={{ lg: 12, md: 10, sm: 6 }}
         rowHeight={70}
         onLayoutChange={handleLayoutChange}
+        onDragStart={handleDragStart}
+        onDragStop={handleDragStop}
+        onResizeStop={handleResizeStop}
         draggableHandle=".drag-handle"
         isResizable={true}
         isDraggable={true}
