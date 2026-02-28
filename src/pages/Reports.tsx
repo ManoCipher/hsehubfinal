@@ -643,24 +643,9 @@ export default function Reports() {
 
           return Object.entries(grouped).map(([name, value]) => ({ name, value }));
         } else if (groupBy === "location") {
-          // Location doesn't exist on employees table, use department as fallback
-          const { data, error } = await supabase
-            .from("employees")
-            .select("department_id, departments(name)")
-            .eq("company_id", companyId);
-
-          if (error) {
-            console.error("Error fetching employee location data:", error);
-            return [];
-          }
-
-          const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
-            const deptName = item.departments?.name || "Unassigned";
-            acc[deptName] = (acc[deptName] || 0) + 1;
-            return acc;
-          }, {});
-
-          return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+          // Employees don't have location field - return empty
+          console.warn("Employees table does not have a location field");
+          return [{ name: "No Location Data", value: 0 }];
         } else if (groupBy === "created_at") {
           const { data, error } = await supabase
             .from("employees")
@@ -809,13 +794,27 @@ export default function Reports() {
             return Object.entries(grouped).map(([name, value]) => ({ name, value }));
           }
           // Fallthrough for other incident groupings
-          const incidentGroupCol = groupBy === "category" ? "incident_type" : (groupBy || "investigation_status");
+          // Handle different incident groupings
+          let incidentGroupCol: string;
+          if (groupBy === "category") {
+            incidentGroupCol = "incident_type";
+          } else if (groupBy === "investigation_status" || groupBy === "status") {
+            incidentGroupCol = "investigation_status";
+          } else if (groupBy === "incident_type") {
+            incidentGroupCol = "incident_type";
+          } else {
+            incidentGroupCol = groupBy || "investigation_status";
+          }
+          
           const { data, error } = await supabase
             .from("incidents")
             .select(incidentGroupCol)
             .eq("company_id", companyId);
 
-          if (error) return [];
+          if (error) {
+            console.error("Error fetching incidents:", error);
+            return [];
+          }
           const groupedIncidents = (data || []).reduce((acc: Record<string, number>, item: any) => {
             const key = item[incidentGroupCol] || "Unknown";
             acc[key] = (acc[key] || 0) + 1;
@@ -825,31 +824,96 @@ export default function Reports() {
 
         case "audits":
           table = "audits";
-          if (groupBy === "category") {
+          // Map groupBy to actual column names
+          if (groupBy === "iso_code") {
+            groupColumn = "iso_code";
+          } else if (groupBy === "status") {
+            groupColumn = "status";
+          } else if (groupBy === "category") {
             groupColumn = "audit_type";
           } else {
             groupColumn = groupBy || "status";
           }
           break;
         case "trainings":
-          // Courses are catalog items
           {
-            const { data, error } = await supabase
-              .from("courses")
-              .select("id, name")
-              .eq("company_id", companyId);
+            // Query training_records table
+            if (groupBy === "employee_id") {
+              // Training Compliance by Employee
+              const { data, error } = await supabase
+                .from("training_records")
+                .select("employee_id, employees(full_name), status")
+                .eq("company_id", companyId);
 
-            if (error) {
-              console.error("Error fetching courses data:", error);
-              return [];
+              if (error) {
+                console.error("Error fetching training by employee:", error);
+                return [];
+              }
+
+              // Group by employee and calculate completion percentage
+              const employeeStats: Record<string, { total: number; completed: number }> = {};
+              
+              (data || []).forEach((item: any) => {
+                const empName = item.employees?.full_name || "Unassigned";
+                if (!employeeStats[empName]) {
+                  employeeStats[empName] = { total: 0, completed: 0 };
+                }
+                employeeStats[empName].total += 1;
+                if (item.status === "completed") {
+                  employeeStats[empName].completed += 1;
+                }
+              });
+
+              return Object.entries(employeeStats).map(([name, stats]) => ({
+                name,
+                value: Math.round((stats.completed / stats.total) * 100) // Completion percentage
+              }));
+            } else if (groupBy === "status") {
+              // Training by status
+              const { data, error } = await supabase
+                .from("training_records")
+                .select("status")
+                .eq("company_id", companyId);
+
+              if (error) {
+                console.error("Error fetching training by status:", error);
+                return [];
+              }
+
+              const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+                const key = item.status || "Unknown";
+                acc[key] = (acc[key] || 0) + 1;
+                return acc;
+              }, {});
+
+              return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+            } else if (groupBy === "created_at") {
+              // Training trends over time
+              const { data, error } = await supabase
+                .from("training_records")
+                .select("created_at")
+                .eq("company_id", companyId)
+                .gte("created_at", startDate)
+                .lte("created_at", endDate);
+
+              if (error) {
+                console.error("Error fetching training trends:", error);
+                return [];
+              }
+
+              const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+                if (!item.created_at) return acc;
+                const date = new Date(item.created_at);
+                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                acc[monthKey] = (acc[monthKey] || 0) + 1;
+                return acc;
+              }, {});
+
+              return Object.entries(grouped)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([name, value]) => ({ name, value }));
             }
-            return (data || []).map(course => ({
-              name: course.name,
-              value: 1, // Just listing them? Or should we count completions? 
-              // The original list logic seemed to just return 1 per course. 
-              // But 'Training Compliance' report suggests we want compliance stats.
-              // Let's keep original simple behavior for now or it gets too complex.
-            }));
+            return [];
           }
           break;
         case "measures":
@@ -910,23 +974,52 @@ export default function Reports() {
           break;
         case "checkups":
           {
-            const { data, error } = await supabase
-              .from("health_checkups")
-              .select("status")
-              .eq("company_id", companyId);
+            if (groupBy === "status") {
+              // Checkups by status
+              const { data, error } = await supabase
+                .from("health_checkups")
+                .select("status")
+                .eq("company_id", companyId);
 
-            if (error) {
-              console.error("Error fetching health checkups data:", error);
-              return [];
+              if (error) {
+                console.error("Error fetching health checkups data:", error);
+                return [];
+              }
+
+              const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+                const key = item.status || "Unknown";
+                acc[key] = (acc[key] || 0) + 1;
+                return acc;
+              }, {});
+
+              return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+            } else if (groupBy === "created_at") {
+              // Checkups over time
+              const { data, error } = await supabase
+                .from("health_checkups")
+                .select("created_at")
+                .eq("company_id", companyId)
+                .gte("created_at", startDate)
+                .lte("created_at", endDate);
+
+              if (error) {
+                console.error("Error fetching checkups over time:", error);
+                return [];
+              }
+
+              const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+                if (!item.created_at) return acc;
+                const date = new Date(item.created_at);
+                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                acc[monthKey] = (acc[monthKey] || 0) + 1;
+                return acc;
+              }, {});
+
+              return Object.entries(grouped)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([name, value]) => ({ name, value }));
             }
-
-            const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
-              const key = item.status || "Unknown";
-              acc[key] = (acc[key] || 0) + 1;
-              return acc;
-            }, {});
-
-            return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+            return [];
           }
           break;
         default:

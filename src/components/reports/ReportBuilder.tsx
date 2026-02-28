@@ -99,13 +99,22 @@ export default function ReportBuilder({
     }
   }, [data]);
 
-  // Refresh data when metric or groupBy changes
+  // Refresh data when metric, groupBy, or dateRange changes
   const handleConfigChange = async (key: string, value: any) => {
-    const newConfig = { ...config, [key]: value };
+    let newConfig = { ...config, [key]: value };
+    
+    // If metric changed, reset groupBy to a valid default
+    if (key === 'metric') {
+      const availableGroupBy = getGroupByOptionsForMetric(value);
+      if (availableGroupBy.length > 0 && !availableGroupBy.find(opt => opt.value === config.groupBy)) {
+        newConfig.groupBy = availableGroupBy[0].value;
+      }
+    }
+    
     setConfig(newConfig);
 
-    // If metric or groupBy changed and we have a refresh callback, fetch new data
-    if ((key === 'metric' || key === 'groupBy') && onRefreshData) {
+    // If metric, groupBy, or dateRange changed and we have a refresh callback, fetch new data
+    if ((key === 'metric' || key === 'groupBy' || key === 'dateRange' || key === 'dateProperty') && onRefreshData) {
       setIsLoading(true);
       try {
         const newData = await onRefreshData(newConfig);
@@ -123,6 +132,66 @@ export default function ReportBuilder({
   const updateConfig = (key: string, value: any) => {
     handleConfigChange(key, value);
   };
+
+  // Get available groupBy options based on selected metric
+  const getGroupByOptionsForMetric = (metric: string) => {
+    switch (metric) {
+      case 'employees':
+        return [
+          { value: 'department', label: 'Department' },
+          { value: 'created_at', label: 'Hire Date' },
+        ];
+      case 'incidents':
+        return [
+          { value: 'investigation_status', label: 'Status' },
+          { value: 'incident_type', label: 'Category' },
+          { value: 'severity', label: 'Severity' },
+          { value: 'location', label: 'Location' },
+          { value: 'created_at', label: 'Date' },
+        ];
+      case 'audits':
+        return [
+          { value: 'status', label: 'Status' },
+          { value: 'iso_code', label: 'ISO Code' },
+          { value: 'created_at', label: 'Date' },
+        ];
+      case 'trainings':
+        return [
+          { value: 'status', label: 'Status' },
+          { value: 'employee_id', label: 'Employee' },
+          { value: 'created_at', label: 'Date' },
+        ];
+      case 'risks':
+        return [
+          { value: 'risk_level', label: 'Risk Level' },
+          { value: 'department', label: 'Department' },
+          { value: 'approval_status', label: 'Approval Status' },
+        ];
+      case 'measures':
+        return [
+          { value: 'status', label: 'Status' },
+          { value: 'department', label: 'Department' },
+        ];
+      case 'checkups':
+        return [
+          { value: 'status', label: 'Status' },
+          { value: 'created_at', label: 'Date' },
+        ];
+      case 'tasks':
+        return [
+          { value: 'status', label: 'Status' },
+          { value: 'priority', label: 'Priority' },
+          { value: 'assigned_to', label: 'Assigned To' },
+        ];
+      default:
+        return [
+          { value: 'department', label: 'Department' },
+          { value: 'status', label: 'Status' },
+        ];
+    }
+  };
+  
+  const getGroupByOptions = () => getGroupByOptionsForMetric(config.metric);
 
   const handleSave = () => {
     // Ensure data is included in the saved config
@@ -266,12 +335,11 @@ export default function ReportBuilder({
                   <SelectValue placeholder="Select grouping" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="department">Department</SelectItem>
-                  <SelectItem value="location">Location</SelectItem>
-                  <SelectItem value="status">Status</SelectItem>
-                  <SelectItem value="category">Category</SelectItem>
-                  <SelectItem value="priority">Priority</SelectItem>
-                  <SelectItem value="assigned_to">Assigned To</SelectItem>
+                  {getGroupByOptions().map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
