@@ -70,7 +70,7 @@ const taskSchema = z.object({
 type TaskFormData = z.infer<typeof taskSchema>;
 
 export default function Tasks() {
-  const { user, loading, companyId } = useAuth();
+  const { user, loading, companyId, userRole } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { logAction } = useAuditLog();
@@ -82,6 +82,8 @@ export default function Tasks() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
+  const [currentEmployeeId, setCurrentEmployeeId] = useState<string | null>(null);
+  const [currentEmployeeName, setCurrentEmployeeName] = useState<string | null>(null);
 
   // @mention state
   const [mentionQuery, setMentionQuery] = useState("");
@@ -102,9 +104,32 @@ export default function Tasks() {
       navigate("/auth");
     }
     if (user && companyId) {
+      fetchEmployeeId();
       fetchData();
     }
   }, [user, loading, navigate, companyId]);
+
+  const fetchEmployeeId = async () => {
+    if (!user?.email || !companyId) return;
+
+    console.log("🔍 [Tasks] Looking up Employee ID for:", user.email);
+
+    // Find employee by email
+    const { data: empByEmail } = await supabase
+      .from("employees")
+      .select("id, full_name")
+      .ilike("email", user.email)
+      .eq("company_id", companyId)
+      .maybeSingle();
+
+    if (empByEmail) {
+      console.log("✅ [Tasks] Found Employee ID:", empByEmail.id);
+      setCurrentEmployeeId(empByEmail.id);
+      setCurrentEmployeeName(empByEmail.full_name);
+    } else {
+      console.log("⚠️ [Tasks] No employee record found for this user");
+    }
+  };
 
   const fetchData = async () => {
     if (!companyId) return;
@@ -265,7 +290,33 @@ export default function Tasks() {
     }
   };
 
-  const filteredTasks = tasks.filter((task) =>
+  // Apply task visibility filtering for all users (including admins)
+  const visibleTasks = tasks.filter((task) => {
+    const title = (task.title || "").toLowerCase();
+    const desc = (task.description || "").toLowerCase();
+    const hasAnyMention = title.includes("@") || desc.includes("@");
+
+    // Broadcast task: no @ in either field — show to everyone
+    if (!hasAnyMention) return true;
+
+    // Check if this employee is @mentioned (in title or description)
+    if (currentEmployeeName) {
+      const nameLower = currentEmployeeName.toLowerCase();
+      if (title.includes(`@${nameLower}`) || desc.includes(`@${nameLower}`)) {
+        return true;
+      }
+    }
+
+    // Directly assigned to this employee
+    if (currentEmployeeId && task.assigned_to === currentEmployeeId) {
+      return true;
+    }
+
+    return false;
+  });
+
+  // Apply search filter on top of visibility filter
+  const filteredTasks = visibleTasks.filter((task) =>
     task.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
