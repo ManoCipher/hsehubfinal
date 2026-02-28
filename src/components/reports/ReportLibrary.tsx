@@ -48,13 +48,6 @@ const REPORT_TEMPLATES = [
         chartType: "bar" as const,
         description: "Breakdown by incident type",
       },
-      {
-        title: "Open vs Closed Trends",
-        metric: "incidents",
-        groupBy: "created_at",
-        chartType: "line" as const,
-        description: "Track incident resolution over time",
-      },
     ],
   },
   {

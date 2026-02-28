@@ -326,6 +326,10 @@ export default function Reports() {
     if (!companyId) return;
 
     try {
+      // Fetch counts from all HSE modules:
+      // - Measures: Corrective/preventive actions from risks, audits, and incidents
+      // - Audits: Compliance checks and inspections (ISO standards)
+      // - Health Check-ups: Employee medical examinations (G-Investigations)
       const [
         employeesRes,
         risksRes,
@@ -370,7 +374,7 @@ export default function Reports() {
           .select("id", { count: "exact", head: true })
           .eq("company_id", companyId),
         supabase
-          .from("employee_checkups")
+          .from("health_checkups")
           .select("id", { count: "exact", head: true })
           .eq("company_id", companyId),
         supabase
@@ -479,17 +483,69 @@ export default function Reports() {
     }
   };
 
-  const fetchChartData = () => {
-    // Mock data for demonstration - replace with actual data fetching
-    const mockData = [
-      { month: "Jan", incidents: 4, trainings: 12, tasks: 25 },
-      { month: "Feb", incidents: 7, trainings: 15, tasks: 28 },
-      { month: "Mar", incidents: 3, trainings: 18, tasks: 32 },
-      { month: "Apr", incidents: 5, trainings: 14, tasks: 27 },
-      { month: "May", incidents: 6, trainings: 20, tasks: 35 },
-      { month: "Jun", incidents: 2, trainings: 22, tasks: 38 },
-    ];
-    setChartData(mockData);
+  const fetchChartData = async () => {
+    if (!companyId) return;
+
+    try {
+      // Calculate date range for last 6 months from current date
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setMonth(startDate.getMonth() - 6);
+      startDate.setDate(1); // Start from first day of month
+
+      // Generate array of last 6 months
+      const months: { label: string; startDate: Date; endDate: Date }[] = [];
+      for (let i = 5; i >= 0; i--) {
+        const monthDate = new Date();
+        monthDate.setMonth(monthDate.getMonth() - i);
+        const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+        const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59);
+        
+        months.push({
+          label: monthStart.toLocaleDateString('en-US', { month: 'short' }),
+          startDate: monthStart,
+          endDate: monthEnd,
+        });
+      }
+
+      // Fetch incidents, trainings, and tasks for each month
+      const chartDataPromises = months.map(async (month) => {
+        const [incidentsRes, trainingsRes, tasksRes] = await Promise.all([
+          supabase
+            .from("incidents")
+            .select("id", { count: "exact", head: true })
+            .eq("company_id", companyId)
+            .gte("incident_date", month.startDate.toISOString())
+            .lte("incident_date", month.endDate.toISOString()),
+          supabase
+            .from("training_records")
+            .select("id", { count: "exact", head: true })
+            .eq("company_id", companyId)
+            .gte("created_at", month.startDate.toISOString())
+            .lte("created_at", month.endDate.toISOString()),
+          supabase
+            .from("tasks")
+            .select("id", { count: "exact", head: true })
+            .eq("company_id", companyId)
+            .gte("created_at", month.startDate.toISOString())
+            .lte("created_at", month.endDate.toISOString()),
+        ]);
+
+        return {
+          month: month.label,
+          incidents: incidentsRes.count || 0,
+          trainings: trainingsRes.count || 0,
+          tasks: tasksRes.count || 0,
+        };
+      });
+
+      const data = await Promise.all(chartDataPromises);
+      setChartData(data);
+    } catch (error) {
+      console.error("Error fetching chart data:", error);
+      // Fallback to empty data on error
+      setChartData([]);
+    }
   };
 
   const exportReport = () => {
@@ -764,7 +820,7 @@ export default function Reports() {
         case "checkups":
           {
             const { data, error } = await supabase
-              .from("employee_checkups") // Changed from health_checkups to employee_checkups as per fetchReportData usage (line 241)
+              .from("health_checkups")
               .select("status")
               .eq("company_id", companyId);
 
@@ -2215,7 +2271,7 @@ function AuditsSection({ stats, chartData }: { stats: ReportStats; chartData: an
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold mb-2">Safety Audits</h2>
-          <p className="text-muted-foreground">Audit completion and compliance. Drag cards to reposition, drag corners to resize.</p>
+          <p className="text-muted-foreground">Tracks compliance checks and ISO standard audits. This shows audit completion status and helps ensure regulatory compliance.</p>
         </div>
         <Button variant="outline" size="sm" onClick={resetLayout}>
           <RotateCcw className="w-4 h-4 mr-2" />
@@ -2554,7 +2610,7 @@ function MeasuresSection({ stats, chartData }: { stats: ReportStats; chartData: 
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold mb-2">Measures</h2>
-          <p className="text-muted-foreground">Corrective and preventive actions. Drag cards to reposition, drag corners to resize.</p>
+          <p className="text-muted-foreground">Tracks corrective and preventive actions derived from risk assessments, audit findings, and incident investigations.</p>
         </div>
         <Button variant="outline" size="sm" onClick={resetLayout}>
           <RotateCcw className="w-4 h-4 mr-2" />
@@ -2728,7 +2784,7 @@ function CheckupsSection({ stats }: { stats: ReportStats }) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold mb-2">Health Check-ups</h2>
-          <p className="text-muted-foreground">Employee health monitoring. Drag cards to reposition, drag corners to resize.</p>
+          <p className="text-muted-foreground">Tracks G-Investigation health examinations (e.g., vision tests, hearing tests) for occupational medical care compliance.</p>
         </div>
         <Button variant="outline" size="sm" onClick={resetLayout}>
           <RotateCcw className="w-4 h-4 mr-2" />
