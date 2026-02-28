@@ -256,17 +256,24 @@ export default function Incidents() {
 
         if (error) throw error;
 
-        logAction({
-          action: "update_incident",
-          targetType: "incident",
-          targetId: editingIncident.id,
-          targetName: formData.title,
-          details: {
-            severity: formData.severity,
-            type: formData.incident_type,
-            status: formData.investigation_status
-          }
-        });
+        // Log incident update (using direct RPC like login)
+        try {
+          await supabase.rpc("create_audit_log", {
+            p_action_type: "update_incident",
+            p_target_type: "incident",
+            p_target_id: editingIncident.id,
+            p_target_name: formData.title,
+            p_details: {
+              severity: formData.severity,
+              type: formData.incident_type,
+              status: formData.investigation_status
+            },
+            p_company_id: companyId,
+          });
+          console.log("✅ Incident update log created:", formData.title);
+        } catch (auditLogErr) {
+          console.error("❌ Failed to create incident update log:", auditLogErr);
+        }
 
         toast({
           title: "Success",
@@ -281,16 +288,44 @@ export default function Incidents() {
 
         if (error) throw error;
 
-        logAction({
-          action: "create_incident",
-          targetType: "incident",
-          targetId: newIncident?.id,
-          targetName: formData.title,
-          details: {
-            severity: formData.severity,
-            type: formData.incident_type
-          }
+        // Log incident creation
+        console.log("🔵 [INCIDENT LOG] Starting audit log creation...");
+        console.log("🔵 [INCIDENT LOG] Parameters:", {
+          incident_id: newIncident?.id,
+          incident_title: formData.title,
+          company_id: companyId,
+          severity: formData.severity
         });
+        
+        try {
+          const { data: logResult, error: logError } = await supabase.rpc("create_audit_log", {
+            p_action_type: "create_incident",
+            p_target_type: "incident",
+            p_target_id: newIncident?.id,
+            p_target_name: formData.title,
+            p_details: {
+              severity: formData.severity,
+              type: formData.incident_type
+            },
+            p_company_id: companyId,
+          });
+          
+          if (logError) {
+            console.error("❌ [INCIDENT LOG] RPC Error:", logError);
+          } else {
+            console.log("✅ [INCIDENT LOG] Created! Log ID:", logResult);
+            
+            // Verify the log was created
+            const { data: verifyLog } = await supabase
+              .from("audit_logs")
+              .select("*")
+              .eq("id", logResult)
+              .single();
+            console.log("🔍 [INCIDENT LOG] Verification:", verifyLog);
+          }
+        } catch (auditLogErr) {
+          console.error("❌ [INCIDENT LOG] Exception:", auditLogErr);
+        }
 
         toast({
           title: "Success",
@@ -320,13 +355,20 @@ export default function Incidents() {
         .eq("id", id);
       if (error) throw error;
 
-      logAction({
-        action: "delete_incident",
-        targetType: "incident",
-        targetId: id,
-        targetName: "Incident",
-        details: { id }
-      });
+      // Log incident deletion (using direct RPC like login)
+      try {
+        await supabase.rpc("create_audit_log", {
+          p_action_type: "delete_incident",
+          p_target_type: "incident",
+          p_target_id: id,
+          p_target_name: "Incident",
+          p_details: { id },
+          p_company_id: companyId,
+        });
+        console.log("✅ Incident deletion log created");
+      } catch (auditLogErr) {
+        console.error("❌ Failed to create incident deletion log:", auditLogErr);
+      }
 
       toast({ title: "Success", description: "Incident deleted successfully" });
       fetchIncidents();

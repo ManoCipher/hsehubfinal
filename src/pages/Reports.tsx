@@ -298,19 +298,25 @@ export default function Reports() {
   };
 
   // Save custom reports to localStorage
-  const saveCustomReports = (reports: ReportConfig[]) => {
+  const saveCustomReports = async (reports: ReportConfig[]) => {
     try {
       localStorage.setItem('hse_custom_reports', JSON.stringify(reports));
       setCustomReports(reports);
 
-      // Log action
-      logAction({
-        action: "update_custom_reports",
-        targetType: "reports",
-        targetId: "custom_reports",
-        targetName: "Custom Reports Configuration",
-        details: { count: reports.length }
-      });
+      // Log action (using direct RPC like login)
+      try {
+        await supabase.rpc("create_audit_log", {
+          p_action_type: "update_custom_reports",
+          p_target_type: "reports",
+          p_target_id: "custom_reports",
+          p_target_name: "Custom Reports Configuration",
+          p_details: { count: reports.length },
+          p_company_id: companyId,
+        });
+        console.log("✅ Custom reports update log created, count:", reports.length);
+      } catch (auditLogErr) {
+        console.error("❌ Failed to create reports log:", auditLogErr);
+      }
     } catch (error) {
       console.error('Error saving custom reports:', error);
     }

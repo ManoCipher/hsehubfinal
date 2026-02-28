@@ -209,18 +209,45 @@ export default function Tasks() {
       // ─────────────────────────────────────────────────────────────────────
 
       // Log audit action for task creation
-      logAction({
-        action: "assign_task",
-        targetType: "task",
-        targetId: insertedRows.id,
-        targetName: insertedRows.title,
-        details: {
-          assignee_id: data.assigned_to,
-          priority: data.priority,
-          status: data.status,
-          due_date: data.due_date
-        }
+      console.log("🔵 [TASK LOG] Starting audit log creation...");
+      console.log("🔵 [TASK LOG] Parameters:", {
+        task_id: insertedRows.id,
+        task_title: insertedRows.title,
+        company_id: companyId,
+        assignee: data.assigned_to
       });
+      
+      try {
+        const { data: logResult, error: logError } = await supabase.rpc("create_audit_log", {
+          p_action_type: "assign_task",
+          p_target_type: "task",
+          p_target_id: insertedRows.id,
+          p_target_name: insertedRows.title,
+          p_details: {
+            assignee_id: data.assigned_to,
+            priority: data.priority,
+            status: data.status,
+            due_date: data.due_date
+          },
+          p_company_id: companyId,
+        });
+        
+        if (logError) {
+          console.error("❌ [TASK LOG] RPC Error:", logError);
+        } else {
+          console.log("✅ [TASK LOG] Created! Log ID:", logResult);
+          
+          // Verify the log was created
+          const { data: verifyLog } = await supabase
+            .from("audit_logs")
+            .select("*")
+            .eq("id", logResult)
+            .single();
+          console.log("🔍 [TASK LOG] Verification:", verifyLog);
+        }
+      } catch (auditErr) {
+        console.error("❌ [TASK LOG] Exception:", auditErr);
+      }
 
       toast({ title: "Success", description: "Task created successfully" });
       setIsDialogOpen(false);

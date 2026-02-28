@@ -33,11 +33,18 @@ export function useAuditLog() {
     const logAction = useCallback(
         async ({ action, targetType, targetId, targetName, details }: LogActionParams) => {
             if (!companyId) {
-                console.warn("Attempted to log action without companyId:", action);
+                console.warn("⚠️ Attempted to log action without companyId:", action);
                 return;
             }
 
             try {
+                console.log("📝 Logging action:", {
+                    action,
+                    targetType,
+                    targetName,
+                    companyId
+                });
+
                 const { error } = await supabase.rpc("create_audit_log", {
                     p_action_type: action,
                     p_target_type: targetType,
@@ -48,12 +55,12 @@ export function useAuditLog() {
                 });
 
                 if (error) {
-                    console.error("Failed to create audit log:", error);
-                    // Optional: toast.error("Failed to log action"); 
-                    // We usually don't want to show toast for logging failures to users unless critical
+                    console.error("❌ Failed to create audit log:", error);
+                } else {
+                    console.log("✅ Audit log created successfully:", action);
                 }
             } catch (err) {
-                console.error("Unexpected error logging action:", err);
+                console.error("❌ Unexpected error logging action:", err);
             }
         },
         [companyId]

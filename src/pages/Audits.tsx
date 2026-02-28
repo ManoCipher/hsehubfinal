@@ -183,17 +183,44 @@ export default function Audits() {
       await generateChecklistItems(auditData.id, formData.iso_code);
 
       // Log audit action
-      logAction({
-        action: "create_audit",
-        targetType: "audit",
-        targetId: auditData.id,
-        targetName: formData.title,
-        details: {
-          iso_code: formData.iso_code,
-          scheduled_date: formData.scheduled_date,
-          responsible_person_id: formData.responsible_person_id
-        }
+      console.log("🔵 [AUDIT LOG] Starting audit log creation...");
+      console.log("🔵 [AUDIT LOG] Parameters:", {
+        audit_id: auditData.id,
+        audit_title: formData.title,
+        company_id: companyId,
+        iso_code: formData.iso_code
       });
+      
+      try {
+        const { data: logResult, error: logError } = await supabase.rpc("create_audit_log", {
+          p_action_type: "create_audit",
+          p_target_type: "audit",
+          p_target_id: auditData.id,
+          p_target_name: formData.title,
+          p_details: {
+            iso_code: formData.iso_code,
+            scheduled_date: formData.scheduled_date,
+            responsible_person_id: formData.responsible_person_id
+          },
+          p_company_id: companyId,
+        });
+        
+        if (logError) {
+          console.error("❌ [AUDIT LOG] RPC Error:", logError);
+        } else {
+          console.log("✅ [AUDIT LOG] Created! Log ID:", logResult);
+          
+          // Verify the log was created
+          const { data: verifyLog } = await supabase
+            .from("audit_logs")
+            .select("*")
+            .eq("id", logResult)
+            .single();
+          console.log("🔍 [AUDIT LOG] Verification:", verifyLog);
+        }
+      } catch (auditLogErr) {
+        console.error("❌ [AUDIT LOG] Exception:", auditLogErr);
+      }
 
       toast({
         title: "Success",
