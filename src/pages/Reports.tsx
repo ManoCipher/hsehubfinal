@@ -337,11 +337,13 @@ export default function Reports() {
         tasksRes,
         incidentsRes,
         measuresRes,
+        riskMeasuresRes,
         trainingsRes,
         checkUpsRes,
         completedAuditsRes,
         completedTasksRes,
         completedMeasuresRes,
+        completedRiskMeasuresRes,
         openIncidentsRes,
         trainingRes,
       ] = await Promise.all([
@@ -370,6 +372,10 @@ export default function Reports() {
           .select("id", { count: "exact", head: true })
           .eq("company_id", companyId),
         supabase
+          .from("risk_assessment_measures")
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", companyId),
+        supabase
           .from("courses")
           .select("id", { count: "exact", head: true })
           .eq("company_id", companyId),
@@ -392,6 +398,11 @@ export default function Reports() {
           .select("id", { count: "exact", head: true })
           .eq("company_id", companyId)
           .eq("status", "completed"),
+        supabase
+          .from("risk_assessment_measures")
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", companyId)
+          .eq("progress_status", "completed"),
         supabase
           .from("incidents" as any)
           .select("id", { count: "exact", head: true })
@@ -417,12 +428,12 @@ export default function Reports() {
         totalAudits: auditsRes.count || 0,
         totalTasks: tasksRes.count || 0,
         totalIncidents: incidentsRes.count || 0,
-        totalMeasures: measuresRes.count || 0,
+        totalMeasures: (measuresRes.count || 0) + (riskMeasuresRes.count || 0),
         totalTrainings: trainingsRes.count || 0,
         totalCheckUps: checkUpsRes.count || 0,
         completedAudits: completedAuditsRes.count || 0,
         completedTasks: completedTasksRes.count || 0,
-        completedMeasures: completedMeasuresRes.count || 0,
+        completedMeasures: (completedMeasuresRes.count || 0) + (completedRiskMeasuresRes.count || 0),
         openIncidents: openIncidentsRes.count || 0,
         trainingCompliance: trainingComplianceRate,
       });
@@ -719,30 +730,58 @@ export default function Reports() {
       // Special handling for Measures
       if (metric === "measures") {
         if (groupBy === "department") {
-          // Measures might not have direct department, join via responsible person -> department
-          // Note: using 'employees!responsible_person_id' valid if FK exists, else try 'employees'
-          const { data, error } = await supabase
-            .from("measures" as any)
-            .select(`
-              responsible_person_id,
-              responsible_person:employees!responsible_person_id(
-                departments(name)
-              )
-            `)
-            .eq("company_id", companyId);
+          // Query BOTH measures tables and combine by department
+          const promises = [];
+          
+          // Main measures table
+          promises.push(
+            supabase
+              .from("measures" as any)
+              .select(`
+                responsible_person_id,
+                responsible_person:employees!responsible_person_id(
+                  departments(name)
+                )
+              `)
+              .eq("company_id", companyId)
+          );
+          
+          // Risk assessment measures table
+          promises.push(
+            supabase
+              .from("risk_assessment_measures")
+              .select(`
+                responsible_person,
+                responsible_employee:employees!responsible_person(
+                  departments(name)
+                )
+              `)
+              .eq("company_id", companyId)
+          );
 
-          if (error) {
-            console.error("Error fetching measures department:", error);
-            return [];
+          const [measuresRes, riskMeasuresRes] = await Promise.all(promises);
+
+          if (measuresRes.error) {
+            console.error("Error fetching measures department:", measuresRes.error);
+          }
+          if (riskMeasuresRes.error) {
+            console.error("Error fetching risk measures department:", riskMeasuresRes.error);
           }
 
-          const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
-            // item.responsible_person is the joined employee object
-            // item.responsible_person.departments is the joined department object
+          // Combine and group by department
+          const grouped: Record<string, number> = {};
+          
+          // Add data from main measures table
+          (measuresRes.data || []).forEach((item: any) => {
             const dept = item.responsible_person?.departments?.name || "Unassigned";
-            acc[dept] = (acc[dept] || 0) + 1;
-            return acc;
-          }, {});
+            grouped[dept] = (grouped[dept] || 0) + 1;
+          });
+          
+          // Add data from risk_assessment_measures table
+          (riskMeasuresRes.data || []).forEach((item: any) => {
+            const dept = item.responsible_employee?.departments?.name || "Unassigned";
+            grouped[dept] = (grouped[dept] || 0) + 1;
+          });
 
           return Object.entries(grouped).map(([name, value]) => ({ name, value }));
         }
@@ -814,8 +853,60 @@ export default function Reports() {
           }
           break;
         case "measures":
-          table = "measures";
-          groupColumn = groupBy || "status";
+          {
+            // Query BOTH measures tables and combine the data
+            const promises = [];
+            
+            // Main measures table
+            promises.push(
+              supabase
+                .from("measures" as any)
+                .select("status")
+                .eq("company_id", companyId)
+                .gte("created_at", startDate)
+                .lte("created_at", endDate)
+            );
+            
+            // Risk assessment measures table
+            promises.push(
+              supabase
+                .from("risk_assessment_measures")
+                .select("progress_status")
+                .eq("company_id", companyId)
+                .gte("created_at", startDate)
+                .lte("created_at", endDate)
+            );
+
+            const [measuresRes, riskMeasuresRes] = await Promise.all(promises);
+
+            if (measuresRes.error) {
+              console.error("Error fetching measures:", measuresRes.error);
+            }
+            if (riskMeasuresRes.error) {
+              console.error("Error fetching risk measures:", riskMeasuresRes.error);
+            }
+
+            // Combine and group data
+            const combined: Record<string, number> = {};
+            
+            // Add data from main measures table
+            (measuresRes.data || []).forEach((item: any) => {
+              const key = item.status || "Unknown";
+              combined[key] = (combined[key] || 0) + 1;
+            });
+            
+            // Add data from risk_assessment_measures table (map progress_status to status)
+            (riskMeasuresRes.data || []).forEach((item: any) => {
+              // Map progress_status names to match status names
+              let key = item.progress_status || "Unknown";
+              // Map risk assessment statuses to standard measure statuses
+              if (key === "not_started") key = "planned";
+              if (key === "blocked") key = "cancelled";
+              combined[key] = (combined[key] || 0) + 1;
+            });
+
+            return Object.entries(combined).map(([name, value]) => ({ name, value }));
+          }
           break;
         case "checkups":
           {
