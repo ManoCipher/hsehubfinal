@@ -37,7 +37,8 @@ export default function NotificationBell() {
   useEffect(() => {
     if (companyId && user) {
       fetchNotifications();
-      setupRealtimeSubscription();
+      const cleanup = setupRealtimeSubscription();
+      return cleanup;
     }
   }, [companyId, user]);
 
@@ -178,7 +179,11 @@ export default function NotificationBell() {
         (payload) => {
           const newNotif = payload.new as Notification;
           setNotifications((prev) => [newNotif, ...prev]);
-          setUnreadCount((prev) => prev + 1);
+          
+          // Only increment unread count if the notification is unread
+          if (!newNotif.is_read) {
+            setUnreadCount((prev) => prev + 1);
+          }
 
           // Show toast for all task mentions and important notifications
           if (
@@ -192,6 +197,28 @@ export default function NotificationBell() {
               variant: newNotif.type === "error" ? "destructive" : "default",
             });
           }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${user?.id}`,
+        },
+        (payload) => {
+          const updatedNotif = payload.new as Notification;
+          setNotifications((prev) =>
+            prev.map((n) => (n.id === updatedNotif.id ? updatedNotif : n))
+          );
+          
+          // Recalculate unread count to ensure accuracy
+          setNotifications((prev) => {
+            const count = prev.filter((n) => !n.is_read).length;
+            setUnreadCount(count);
+            return prev;
+          });
         }
       )
       .subscribe();
