@@ -356,6 +356,23 @@ export default function AuditDetails() {
     }
   };
 
+  // Persist computed progress back to the audits table so the list page stays in sync
+  const syncProgressToDb = async (updatedItems: any[]) => {
+    if (!id) return;
+    const total = updatedItems.length;
+    if (total === 0) return;
+    const completed = updatedItems.filter((i) => i.implemented && i.satisfied).length;
+    const percentage = Math.round((completed / total) * 100);
+    await supabase
+      .from("audits")
+      .update({
+        progress_percentage: percentage,
+        completed_items: completed,
+        total_items: total,
+      })
+      .eq("id", id);
+  };
+
   const updateChecklistItem = async (itemId: string, updates: any) => {
     try {
       const { error } = await supabase
@@ -368,12 +385,14 @@ export default function AuditDetails() {
 
       if (error) throw error;
 
-      // Update local state only - don't reload the entire page
-      setChecklistItems((items) =>
-        items.map((item) =>
+      // Update local state and sync progress to DB
+      setChecklistItems((items) => {
+        const updated = items.map((item) =>
           item.id === itemId ? { ...item, ...updates } : item
-        )
-      );
+        );
+        syncProgressToDb(updated);
+        return updated;
+      });
     } catch (err: any) {
       toast({
         title: "Error updating item",
@@ -461,14 +480,16 @@ export default function AuditDetails() {
           .eq("id", update.id)
       )
     ).then(() => {
-      // Update local state
-      setChecklistItems(items =>
-        items.map(item => ({
+      // Update local state and sync progress to DB
+      setChecklistItems(items => {
+        const updated = items.map(item => ({
           ...item,
           implemented: true,
           satisfied: true,
-        }))
-      );
+        }));
+        syncProgressToDb(updated);
+        return updated;
+      });
       
       toast({
         title: "All items selected",
