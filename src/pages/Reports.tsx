@@ -2465,9 +2465,11 @@ function RiskAssessmentsSection({ stats, chartData }: { stats: ReportStats; char
   const isDraggingRef = useRef(false);
   const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
   const lastSavedLayoutRef = useRef<string>('');
-  const defaultLayout = [
-    { i: "risk-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-  ];
+  const defaultLayout = {
+    lg: [{ i: "risk-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false }],
+    md: [{ i: "risk-total", x: 0, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false }],
+    sm: [{ i: "risk-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false }],
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
@@ -2481,7 +2483,7 @@ function RiskAssessmentsSection({ stats, chartData }: { stats: ReportStats; char
     } catch (error) {
       console.error('Error loading risk assessments layout:', error);
     }
-    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    return defaultLayout;
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
@@ -2524,7 +2526,7 @@ function RiskAssessmentsSection({ stats, chartData }: { stats: ReportStats; char
   }, []);
 
   const resetLayout = useCallback(() => {
-    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    const defaultLayouts = defaultLayout;
     setLayouts(defaultLayouts);
     localStorage.removeItem('hse_layout_risk_assessments');
     toast({ title: "Layout Reset", description: "Risk Assessments layout has been reset to default" });
@@ -2558,7 +2560,8 @@ function RiskAssessmentsSection({ stats, chartData }: { stats: ReportStats; char
         isDraggable={true}
         margin={[12, 12]}
         containerPadding={[0, 0]}
-        compactType={null}
+        compactType="vertical"
+        preventCollision={false}
       >
         <div key="risk-total">
           <DraggableCard
@@ -2580,10 +2583,20 @@ function AuditsSection({ stats, chartData }: { stats: ReportStats; chartData: an
   const isDraggingRef = useRef(false);
   const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
   const lastSavedLayoutRef = useRef<string>('');
-  const defaultLayout = [
-    { i: "audit-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-    { i: "audit-completed", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-  ];
+  const defaultLayout = {
+    lg: [
+      { i: "audit-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "audit-completed", x: 6, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    md: [
+      { i: "audit-total", x: 0, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+      { i: "audit-completed", x: 5, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    sm: [
+      { i: "audit-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "audit-completed", x: 0, y: 2, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
@@ -2597,7 +2610,7 @@ function AuditsSection({ stats, chartData }: { stats: ReportStats; chartData: an
     } catch (error) {
       console.error('Error loading audits layout:', error);
     }
-    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    return defaultLayout;
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
@@ -2640,7 +2653,7 @@ function AuditsSection({ stats, chartData }: { stats: ReportStats; chartData: an
   }, []);
 
   const resetLayout = useCallback(() => {
-    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    const defaultLayouts = defaultLayout;
     setLayouts(defaultLayouts);
     localStorage.removeItem('hse_layout_audits');
     toast({ title: "Layout Reset", description: "Audits layout has been reset to default" });
@@ -2674,7 +2687,8 @@ function AuditsSection({ stats, chartData }: { stats: ReportStats; chartData: an
         isDraggable={true}
         margin={[12, 12]}
         containerPadding={[0, 0]}
-        compactType={null}
+        compactType="vertical"
+        preventCollision={false}
       >
         <div key="audit-total">
           <DraggableCard
@@ -2705,11 +2719,23 @@ function IncidentsSection({ stats, chartData }: { stats: ReportStats; chartData:
   const isDraggingRef = useRef(false);
   const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
   const lastSavedLayoutRef = useRef<string>('');
-  const defaultLayout = [
-    { i: "incident-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-    { i: "incident-open", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-    { i: "incident-closed", x: 6, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-  ];
+  const defaultLayout = {
+    lg: [
+      { i: "incident-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "incident-open", x: 6, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "incident-closed", x: 0, y: 2, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    md: [
+      { i: "incident-total", x: 0, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+      { i: "incident-open", x: 5, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+      { i: "incident-closed", x: 0, y: 2, w: 5, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    sm: [
+      { i: "incident-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "incident-open", x: 0, y: 2, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "incident-closed", x: 0, y: 4, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
@@ -2723,7 +2749,7 @@ function IncidentsSection({ stats, chartData }: { stats: ReportStats; chartData:
     } catch (error) {
       console.error('Error loading incidents layout:', error);
     }
-    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    return defaultLayout;
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
@@ -2766,7 +2792,7 @@ function IncidentsSection({ stats, chartData }: { stats: ReportStats; chartData:
   }, []);
 
   const resetLayout = useCallback(() => {
-    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    const defaultLayouts = defaultLayout;
     setLayouts(defaultLayouts);
     localStorage.removeItem('hse_layout_incidents');
     toast({ title: "Layout Reset", description: "Incidents layout has been reset to default" });
@@ -2800,7 +2826,8 @@ function IncidentsSection({ stats, chartData }: { stats: ReportStats; chartData:
         isDraggable={true}
         margin={[12, 12]}
         containerPadding={[0, 0]}
-        compactType={null}
+        compactType="vertical"
+        preventCollision={false}
       >
         <div key="incident-total">
           <DraggableCard
@@ -2848,10 +2875,20 @@ function TrainingsSection({
   const isDraggingRef = useRef(false);
   const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
   const lastSavedLayoutRef = useRef<string>('');
-  const defaultLayout = [
-    { i: "training-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-    { i: "training-compliance", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-  ];
+  const defaultLayout = {
+    lg: [
+      { i: "training-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "training-compliance", x: 6, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    md: [
+      { i: "training-total", x: 0, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+      { i: "training-compliance", x: 5, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    sm: [
+      { i: "training-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "training-compliance", x: 0, y: 2, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
@@ -2865,7 +2902,7 @@ function TrainingsSection({
     } catch (error) {
       console.error('Error loading trainings layout:', error);
     }
-    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    return defaultLayout;
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
@@ -2947,7 +2984,8 @@ function TrainingsSection({
         isDraggable={true}
         margin={[12, 12]}
         containerPadding={[0, 0]}
-        compactType={null}
+        compactType="vertical"
+        preventCollision={false}
       >
         <div key="training-total">
           <DraggableCard
@@ -3044,11 +3082,23 @@ function MeasuresSection({ stats, chartData }: { stats: ReportStats; chartData: 
   const isDraggingRef = useRef(false);
   const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
   const lastSavedLayoutRef = useRef<string>('');
-  const defaultLayout = [
-    { i: "measures-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-    { i: "measures-completed", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-    { i: "measures-progress", x: 6, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-  ];
+  const defaultLayout = {
+    lg: [
+      { i: "measures-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "measures-completed", x: 6, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "measures-progress", x: 0, y: 2, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    md: [
+      { i: "measures-total", x: 0, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+      { i: "measures-completed", x: 5, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+      { i: "measures-progress", x: 0, y: 2, w: 5, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    sm: [
+      { i: "measures-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "measures-completed", x: 0, y: 2, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "measures-progress", x: 0, y: 4, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
@@ -3057,12 +3107,12 @@ function MeasuresSection({ stats, chartData }: { stats: ReportStats; chartData: 
 
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
     try {
-      const saved = localStorage.getItem('hse_layout_measures');
+      const saved = localStorage.getItem('hse_layout_measures_v2');
       if (saved) return JSON.parse(saved);
     } catch (error) {
       console.error('Error loading measures layout:', error);
     }
-    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    return defaultLayout;
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
@@ -3075,7 +3125,7 @@ function MeasuresSection({ stats, chartData }: { stats: ReportStats; chartData: 
     if (serialized === lastSavedLayoutRef.current) return;
     lastSavedLayoutRef.current = serialized;
     try {
-      localStorage.setItem('hse_layout_measures', serialized);
+      localStorage.setItem('hse_layout_measures_v2', serialized);
     } catch (error) {
       console.error('Error saving measures layout:', error);
     }
@@ -3089,7 +3139,7 @@ function MeasuresSection({ stats, chartData }: { stats: ReportStats; chartData: 
       const serialized = JSON.stringify(allLayouts);
       lastSavedLayoutRef.current = serialized;
       setLayouts(allLayouts);
-      try { localStorage.setItem('hse_layout_measures', serialized); } catch (e) {}
+      try { localStorage.setItem('hse_layout_measures_v2', serialized); } catch (e) {}
       pendingLayoutRef.current = null;
     }
   }, []);
@@ -3099,15 +3149,15 @@ function MeasuresSection({ stats, chartData }: { stats: ReportStats; chartData: 
       const serialized = JSON.stringify(allLayouts);
       lastSavedLayoutRef.current = serialized;
       setLayouts(allLayouts);
-      try { localStorage.setItem('hse_layout_measures', serialized); } catch (e) {}
+      try { localStorage.setItem('hse_layout_measures_v2', serialized); } catch (e) {}
       pendingLayoutRef.current = null;
     }
   }, []);
 
   const resetLayout = useCallback(() => {
-    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    const defaultLayouts = defaultLayout;
     setLayouts(defaultLayouts);
-    localStorage.removeItem('hse_layout_measures');
+    localStorage.removeItem('hse_layout_measures_v2');
     toast({ title: "Layout Reset", description: "Measures layout has been reset to default" });
   }, [toast]);
 
@@ -3139,7 +3189,8 @@ function MeasuresSection({ stats, chartData }: { stats: ReportStats; chartData: 
         isDraggable={true}
         margin={[12, 12]}
         containerPadding={[0, 0]}
-        compactType={null}
+        compactType="vertical"
+        preventCollision={false}
       >
         <div key="measures-total">
           <DraggableCard
@@ -3179,10 +3230,20 @@ function TasksSection({ stats, chartData }: { stats: ReportStats; chartData: any
   const isDraggingRef = useRef(false);
   const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
   const lastSavedLayoutRef = useRef<string>('');
-  const defaultLayout = [
-    { i: "tasks-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-    { i: "tasks-completed", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-  ];
+  const defaultLayout = {
+    lg: [
+      { i: "tasks-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "tasks-completed", x: 6, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    md: [
+      { i: "tasks-total", x: 0, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+      { i: "tasks-completed", x: 5, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    sm: [
+      { i: "tasks-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "tasks-completed", x: 0, y: 2, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
@@ -3196,7 +3257,7 @@ function TasksSection({ stats, chartData }: { stats: ReportStats; chartData: any
     } catch (error) {
       console.error('Error loading tasks layout:', error);
     }
-    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    return defaultLayout;
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
@@ -3239,7 +3300,7 @@ function TasksSection({ stats, chartData }: { stats: ReportStats; chartData: any
   }, []);
 
   const resetLayout = useCallback(() => {
-    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    const defaultLayouts = defaultLayout;
     setLayouts(defaultLayouts);
     localStorage.removeItem('hse_layout_tasks');
     toast({ title: "Layout Reset", description: "Tasks layout has been reset to default" });
@@ -3273,7 +3334,8 @@ function TasksSection({ stats, chartData }: { stats: ReportStats; chartData: any
         isDraggable={true}
         margin={[12, 12]}
         containerPadding={[0, 0]}
-        compactType={null}
+        compactType="vertical"
+        preventCollision={false}
       >
         <div key="tasks-total">
           <DraggableCard
@@ -3304,9 +3366,11 @@ function CheckupsSection({ stats }: { stats: ReportStats }) {
   const isDraggingRef = useRef(false);
   const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
   const lastSavedLayoutRef = useRef<string>('');
-  const defaultLayout = [
-    { i: "checkups-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-  ];
+  const defaultLayout = {
+    lg: [{ i: "checkups-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false }],
+    md: [{ i: "checkups-total", x: 0, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false }],
+    sm: [{ i: "checkups-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false }],
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
@@ -3320,7 +3384,7 @@ function CheckupsSection({ stats }: { stats: ReportStats }) {
     } catch (error) {
       console.error('Error loading checkups layout:', error);
     }
-    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    return defaultLayout;
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
@@ -3363,7 +3427,7 @@ function CheckupsSection({ stats }: { stats: ReportStats }) {
   }, []);
 
   const resetLayout = useCallback(() => {
-    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    const defaultLayouts = defaultLayout;
     setLayouts(defaultLayouts);
     localStorage.removeItem('hse_layout_checkups');
     toast({ title: "Layout Reset", description: "Checkups layout has been reset to default" });
@@ -3397,7 +3461,8 @@ function CheckupsSection({ stats }: { stats: ReportStats }) {
         isDraggable={true}
         margin={[12, 12]}
         containerPadding={[0, 0]}
-        compactType={null}
+        compactType="vertical"
+        preventCollision={false}
       >
         <div key="checkups-total">
           <DraggableCard
