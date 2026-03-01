@@ -219,10 +219,10 @@ export default function RiskAssessments() {
   const [formData, setFormData] = useState({
     title: "",
     description: "",
-    department_id: "",
-    location_id: "",
-    exposure_group_id: "",
-    line_manager_id: "",
+    department_id: "__none__",
+    location_id: "__none__",
+    exposure_group_id: "__none__",
+    line_manager_id: "__none__",
     hazard_category: "",
     probability_before: 3,
     probability_after: 2,
@@ -237,7 +237,7 @@ export default function RiskAssessments() {
   const [measures, setMeasures] = useState<Measure[]>([
     {
       measure_building_block: "",
-      responsible_person: "",
+      responsible_person: "__none__",
       due_date: "",
       progress_status: "not_started",
       notes: "",
@@ -284,7 +284,7 @@ export default function RiskAssessments() {
         supabase
           .from("risk_assessments")
           .select(
-            "*, departments(name), locations(name), exposure_groups(name), employees!risk_assessments_line_manager_id_fkey(full_name)"
+            "*, departments(name), locations(name), exposure_groups(name), team_members!risk_assessments_line_manager_id_fkey(first_name, last_name, role)"
           )
           .eq("company_id", companyId)
           .order("assessment_date", { ascending: false }),
@@ -321,7 +321,7 @@ export default function RiskAssessments() {
         (risksRes.data || []).map(async (risk) => {
           const { data: measures } = await supabase
             .from("risk_assessment_measures")
-            .select("*, employees(full_name)")
+            .select("*, team_members(first_name, last_name, role)")
             .eq("risk_assessment_id", risk.id);
 
           return {
@@ -335,11 +335,14 @@ export default function RiskAssessments() {
       setLocations(locationsRes.data || []);
       setDepartments(departmentsRes.data || []);
       setExposureGroups(exposureGroupsRes.data || []);
-
-      // Map team members to employee format
-      setEmployees((employeesRes.data || []).map((emp: any) => ({
-        id: emp.id,
-        full_name: `${emp.first_name} ${emp.last_name} (${emp.role || 'No Role'})`,
+      
+      // Map team members to employee format with role
+      setEmployees((employeesRes.data || []).map((member: any) => ({
+        id: member.id,
+        full_name: member.role 
+          ? `${member.first_name} ${member.last_name} (${member.role})`
+          : `${member.first_name} ${member.last_name}`,
+        email: member.email,
       })));
     } catch (err: unknown) {
       const e = err as { message?: string } | Error | null;
@@ -441,42 +444,60 @@ export default function RiskAssessments() {
       const riskLevelBefore = getRiskLevel(riskScoreBefore);
       const riskLevelAfter = getRiskLevel(riskScoreAfter);
 
+      // Prepare data for insertion
+      const insertData = {
+        title: formData.title,
+        description: formData.description,
+        department_id: formData.department_id && formData.department_id.trim() !== "" && formData.department_id !== "__none__" ? formData.department_id : null,
+        location_id: formData.location_id && formData.location_id.trim() !== "" && formData.location_id !== "__none__" ? formData.location_id : null,
+        exposure_group_id: formData.exposure_group_id && formData.exposure_group_id.trim() !== "" && formData.exposure_group_id !== "__none__" ? formData.exposure_group_id : null,
+        line_manager_id: formData.line_manager_id && formData.line_manager_id.trim() !== "" && formData.line_manager_id !== "__none__" ? formData.line_manager_id : null,
+        hazard_category: formData.hazard_category || null,
+        probability_before: formData.probability_before,
+        probability_after: formData.probability_after,
+        extent_damage_before: formData.extent_damage_before,
+        extent_damage_after: formData.extent_damage_after,
+        risk_level: riskLevelAfter,
+        risk_matrix_label: formData.risk_matrix_label || null,
+        mitigation_measures: formData.mitigation_measures || null,
+        notes: formData.notes || null,
+        assessment_date: formData.assessment_date,
+        document_paths:
+          uploadedDocuments.length > 0 ? uploadedDocuments : null,
+        approval_status: "draft",
+        status: "open",
+        company_id: companyId,
+      };
+
+      console.log("Inserting risk assessment with data:", insertData);
+
       // Insert risk assessment
-      const { data: created, error } = await supabase
+      const { data: createdData, error } = await supabase
         .from("risk_assessments")
-        .insert([
-          {
-            title: formData.title,
-            description: formData.description,
-            department_id: formData.department_id || null,
-            location_id: formData.location_id || null,
-            exposure_group_id: formData.exposure_group_id || null,
-            line_manager_id: formData.line_manager_id || null,
-            hazard_category: formData.hazard_category || null,
-            probability_before: formData.probability_before,
-            probability_after: formData.probability_after,
-            extent_damage_before: formData.extent_damage_before,
-            extent_damage_after: formData.extent_damage_after,
-            risk_level: riskLevelAfter,
-            risk_matrix_label: formData.risk_matrix_label || null,
-            mitigation_measures: formData.mitigation_measures || null,
-            notes: formData.notes || null,
-            assessment_date: formData.assessment_date,
-            document_paths:
-              uploadedDocuments.length > 0 ? uploadedDocuments : null,
-            approval_status: "draft",
-            status: "open",
-            company_id: companyId,
-          },
-        ])
-        .select("id")
-        .single();
+        .insert([insertData])
+        .select("id");
 
       if (error) {
         console.error("Risk create error:", error);
+        console.error("Error details:", JSON.stringify(error, null, 2));
+        console.error("Error code:", error.code);
+        console.error("Error hint:", error.hint);
+        console.error("Error details property:", error.details);
         toast({
           title: "Error creating risk assessment",
-          description: error.message,
+          description: error.message || "An error occurred while creating the assessment",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const created = createdData && createdData.length > 0 ? createdData[0] : null;
+
+      if (!created) {
+        console.error("No data returned after insert");
+        toast({
+          title: "Error",
+          description: "Risk assessment was not created properly",
           variant: "destructive",
         });
         return;
@@ -491,10 +512,10 @@ export default function RiskAssessments() {
           risk_assessment_id: created.id,
           company_id: companyId,
           measure_building_block: m.measure_building_block,
-          responsible_person: m.responsible_person || null,
-          due_date: m.due_date || null,
+          responsible_person: m.responsible_person && m.responsible_person.trim() !== "" && m.responsible_person !== "__none__" ? m.responsible_person : null,
+          due_date: m.due_date && m.due_date.trim() !== "" ? m.due_date : null,
           progress_status: m.progress_status || "not_started",
-          notes: m.notes || null,
+          notes: m.notes && m.notes.trim() !== "" ? m.notes : null,
         }));
 
         console.log("Measures data to insert:", measuresData);
@@ -542,10 +563,10 @@ export default function RiskAssessments() {
     setFormData({
       title: "",
       description: "",
-      department_id: "",
-      location_id: "",
-      exposure_group_id: "",
-      line_manager_id: "",
+      department_id: "__none__",
+      location_id: "__none__",
+      exposure_group_id: "__none__",
+      line_manager_id: "__none__",
       hazard_category: "",
       probability_before: 3,
       probability_after: 2,
@@ -559,7 +580,7 @@ export default function RiskAssessments() {
     setMeasures([
       {
         measure_building_block: "",
-        responsible_person: "",
+        responsible_person: "__none__",
         due_date: "",
         progress_status: "not_started",
         notes: "",
@@ -842,6 +863,9 @@ export default function RiskAssessments() {
                                   />
                                 </SelectTrigger>
                                 <SelectContent>
+                                  <SelectItem value="__none__">
+                                    {t("common.none")} / Optional
+                                  </SelectItem>
                                   {departments.map((dept) => (
                                     <SelectItem key={dept.id} value={dept.id}>
                                       {dept.name}
@@ -867,6 +891,9 @@ export default function RiskAssessments() {
                                   />
                                 </SelectTrigger>
                                 <SelectContent>
+                                  <SelectItem value="__none__">
+                                    {t("common.none")} / Optional
+                                  </SelectItem>
                                   {locations.map((loc) => (
                                     <SelectItem key={loc.id} value={loc.id}>
                                       {loc.name}
@@ -895,6 +922,9 @@ export default function RiskAssessments() {
                                   />
                                 </SelectTrigger>
                                 <SelectContent>
+                                  <SelectItem value="__none__">
+                                    {t("common.none")} / Optional
+                                  </SelectItem>
                                   {exposureGroups.map((group) => (
                                     <SelectItem key={group.id} value={group.id}>
                                       {group.name}
@@ -923,6 +953,9 @@ export default function RiskAssessments() {
                                   />
                                 </SelectTrigger>
                                 <SelectContent>
+                                  <SelectItem value="__none__">
+                                    {t("common.none")} / Optional
+                                  </SelectItem>
                                   {employees.map((emp) => (
                                     <SelectItem key={emp.id} value={emp.id}>
                                       {emp.full_name}
@@ -1242,6 +1275,9 @@ export default function RiskAssessments() {
                                   />
                                 </SelectTrigger>
                                 <SelectContent>
+                                  <SelectItem value="__none__">
+                                    {t("common.none")} / Optional
+                                  </SelectItem>
                                   {locations.map((loc) => (
                                     <SelectItem key={loc.id} value={loc.id}>
                                       {loc.name}
@@ -1270,6 +1306,9 @@ export default function RiskAssessments() {
                                   />
                                 </SelectTrigger>
                                 <SelectContent>
+                                  <SelectItem value="__none__">
+                                    {t("common.none")} / Optional
+                                  </SelectItem>
                                   {employees.map((emp) => (
                                     <SelectItem key={emp.id} value={emp.id}>
                                       {emp.full_name}
@@ -1370,7 +1409,7 @@ export default function RiskAssessments() {
                                     ...measures,
                                     {
                                       measure_building_block: "",
-                                      responsible_person: "",
+                                      responsible_person: "__none__",
                                       due_date: "",
                                       progress_status: "not_started",
                                       notes: "",
@@ -1441,7 +1480,7 @@ export default function RiskAssessments() {
                                   <div className="space-y-2">
                                     <Label>Responsible Person</Label>
                                     <Select
-                                      value={measure.responsible_person}
+                                      value={measure.responsible_person || "__none__"}
                                       onValueChange={(val) => {
                                         const updated = [...measures];
                                         updated[index].responsible_person = val;
@@ -1452,6 +1491,9 @@ export default function RiskAssessments() {
                                         <SelectValue placeholder="Select responsible person" />
                                       </SelectTrigger>
                                       <SelectContent>
+                                        <SelectItem value="__none__">
+                                          None / Optional
+                                        </SelectItem>
                                         {employees.map((emp) => (
                                           <SelectItem
                                             key={emp.id}

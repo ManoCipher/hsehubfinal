@@ -26,7 +26,7 @@ This document lists all system activities that are automatically logged in the C
 ## 4. Task Management
 | Activity | Action Key | Description |
 | :--- | :--- | :--- |
-| **Assign Task** | `assign_task` | Logged when a new task is assigned to an employee. |
+| **Assign Task** | `assign_task` | Logged when a new task is created or assigned to an employee. |
 | **Complete Task** | `complete_task` | Logged when a task is marked as completed. |
 | **Reopen Task** | `reopen_task` | Logged when a completed task is reopened. |
 
@@ -37,7 +37,13 @@ This document lists all system activities that are automatically logged in the C
 | **Activate ISO Standard** | `activate_iso_standard` | Logged when a compliance standard (e.g., ISO 45001) is enabled. |
 | **Deactivate ISO Standard** | `deactivate_iso_standard` | Logged when a compliance standard is disabled. |
 
-## 6. Company Administration (Super Admin)
+## 6. Audit Management
+| Activity | Action Key | Description |
+| :--- | :--- | :--- |
+| **Create Audit** | `create_audit` | Logged when a new audit is created. Includes ISO standard and schedule. |
+| **Delete Audit** | `delete_audit` | Logged when an audit is deleted from the system. |
+
+## 7. Company Administration (Super Admin)
 | Activity | Action Key | Description |
 | :--- | :--- | :--- |
 | **Block Company** | `block_company` | Logged when a company's access is suspended. |

@@ -231,14 +231,6 @@ export default function MainLayout({ children }: Props) {
                 </Link>
               )}
 
-              {/* Invoices & Billing – visible to company_admin or users with settings permission */}
-              {(userRole === "company_admin" || hasPermission("settings")) && (
-                <Link to="/invoices" className={getLinkClasses("/invoices")}>
-                  <Receipt className="w-4 h-4" />
-                  <span>Invoices &amp; Billing</span>
-                </Link>
-              )}
-
               {hasPermission("settings") && (
                 <div className="pt-3 mt-3 border-t border-gray-200 dark:border-gray-800">
                   <Link to="/settings" className={getLinkClasses("/settings")}>
@@ -297,12 +289,6 @@ export default function MainLayout({ children }: Props) {
                     <DropdownMenuItem className="cursor-pointer">
                       <User className="w-4 h-4 mr-2" />
                       Profile
-                    </DropdownMenuItem>
-                  </Link>
-                  <Link to="/invoices">
-                    <DropdownMenuItem className="cursor-pointer">
-                      <Receipt className="w-4 h-4 mr-2" />
-                      Invoices
                     </DropdownMenuItem>
                   </Link>
                   <DropdownMenuItem

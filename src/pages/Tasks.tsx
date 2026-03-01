@@ -44,6 +44,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuditLog } from "@/hooks/useAuditLog";
 import type { Tables } from "@/integrations/supabase/types";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -69,9 +70,10 @@ const taskSchema = z.object({
 type TaskFormData = z.infer<typeof taskSchema>;
 
 export default function Tasks() {
-  const { user, loading, companyId } = useAuth();
+  const { user, loading, companyId, userRole } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { logAction } = useAuditLog();
   type TaskWithJoins = Tables<"tasks"> & {
     employees?: { full_name: string } | null;
   };
@@ -80,6 +82,8 @@ export default function Tasks() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
+  const [currentEmployeeId, setCurrentEmployeeId] = useState<string | null>(null);
+  const [currentEmployeeName, setCurrentEmployeeName] = useState<string | null>(null);
 
   // @mention state
   const [mentionQuery, setMentionQuery] = useState("");
@@ -100,9 +104,32 @@ export default function Tasks() {
       navigate("/auth");
     }
     if (user && companyId) {
+      fetchEmployeeId();
       fetchData();
     }
   }, [user, loading, navigate, companyId]);
+
+  const fetchEmployeeId = async () => {
+    if (!user?.email || !companyId) return;
+
+    console.log("🔍 [Tasks] Looking up Employee ID for:", user.email);
+
+    // Find employee by email
+    const { data: empByEmail } = await supabase
+      .from("employees")
+      .select("id, full_name")
+      .ilike("email", user.email)
+      .eq("company_id", companyId)
+      .maybeSingle();
+
+    if (empByEmail) {
+      console.log("✅ [Tasks] Found Employee ID:", empByEmail.id);
+      setCurrentEmployeeId(empByEmail.id);
+      setCurrentEmployeeName(empByEmail.full_name);
+    } else {
+      console.log("⚠️ [Tasks] No employee record found for this user");
+    }
+  };
 
   const fetchData = async () => {
     if (!companyId) return;
@@ -206,6 +233,47 @@ export default function Tasks() {
       }
       // ─────────────────────────────────────────────────────────────────────
 
+      // Log audit action for task creation
+      console.log("🔵 [TASK LOG] Starting audit log creation...");
+      console.log("🔵 [TASK LOG] Parameters:", {
+        task_id: insertedRows.id,
+        task_title: insertedRows.title,
+        company_id: companyId,
+        assignee: data.assigned_to
+      });
+      
+      try {
+        const { data: logResult, error: logError } = await supabase.rpc("create_audit_log", {
+          p_action_type: "assign_task",
+          p_target_type: "task",
+          p_target_id: insertedRows.id,
+          p_target_name: insertedRows.title,
+          p_details: {
+            assignee_id: data.assigned_to,
+            priority: data.priority,
+            status: data.status,
+            due_date: data.due_date
+          },
+          p_company_id: companyId,
+        });
+        
+        if (logError) {
+          console.error("❌ [TASK LOG] RPC Error:", logError);
+        } else {
+          console.log("✅ [TASK LOG] Created! Log ID:", logResult);
+          
+          // Verify the log was created
+          const { data: verifyLog } = await supabase
+            .from("audit_logs")
+            .select("*")
+            .eq("id", logResult)
+            .single();
+          console.log("🔍 [TASK LOG] Verification:", verifyLog);
+        }
+      } catch (auditErr) {
+        console.error("❌ [TASK LOG] Exception:", auditErr);
+      }
+
       toast({ title: "Success", description: "Task created successfully" });
       setIsDialogOpen(false);
       form.reset();
@@ -222,7 +290,33 @@ export default function Tasks() {
     }
   };
 
-  const filteredTasks = tasks.filter((task) =>
+  // Apply task visibility filtering for all users (including admins)
+  const visibleTasks = tasks.filter((task) => {
+    const title = (task.title || "").toLowerCase();
+    const desc = (task.description || "").toLowerCase();
+    const hasAnyMention = title.includes("@") || desc.includes("@");
+
+    // Broadcast task: no @ in either field — show to everyone
+    if (!hasAnyMention) return true;
+
+    // Check if this employee is @mentioned (in title or description)
+    if (currentEmployeeName) {
+      const nameLower = currentEmployeeName.toLowerCase();
+      if (title.includes(`@${nameLower}`) || desc.includes(`@${nameLower}`)) {
+        return true;
+      }
+    }
+
+    // Directly assigned to this employee
+    if (currentEmployeeId && task.assigned_to === currentEmployeeId) {
+      return true;
+    }
+
+    return false;
+  });
+
+  // Apply search filter on top of visibility filter
+  const filteredTasks = visibleTasks.filter((task) =>
     task.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
 

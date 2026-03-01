@@ -414,32 +414,30 @@ export default function Dashboard() {
 
       let filteredData = rawData || [];
 
-      // Apply client-side visibility filter for regular employees
-      if (userRole !== "super_admin" && userRole !== "company_admin") {
-        filteredData = filteredData.filter((task: any) => {
-          const title = (task.title || "").toLowerCase();
-          const desc = (task.description || "").toLowerCase();
-          const hasAnyMention = title.includes("@") || desc.includes("@");
+      // Apply client-side visibility filter for all users (including admins)
+      filteredData = filteredData.filter((task: any) => {
+        const title = (task.title || "").toLowerCase();
+        const desc = (task.description || "").toLowerCase();
+        const hasAnyMention = title.includes("@") || desc.includes("@");
 
-          // Broadcast task: no @ in either field — show to everyone
-          if (!hasAnyMention) return true;
+        // Broadcast task: no @ in either field — show to everyone
+        if (!hasAnyMention) return true;
 
-          // Check if this employee is @mentioned (in title or description)
-          if (currentEmployeeName) {
-            const nameLower = currentEmployeeName.toLowerCase();
-            if (title.includes(`@${nameLower}`) || desc.includes(`@${nameLower}`)) {
-              return true;
-            }
-          }
-
-          // Directly assigned to this employee
-          if (currentEmployeeId && task.assigned_to === currentEmployeeId) {
+        // Check if this employee is @mentioned (in title or description)
+        if (currentEmployeeName) {
+          const nameLower = currentEmployeeName.toLowerCase();
+          if (title.includes(`@${nameLower}`) || desc.includes(`@${nameLower}`)) {
             return true;
           }
+        }
 
-          return false;
-        });
-      }
+        // Directly assigned to this employee
+        if (currentEmployeeId && task.assigned_to === currentEmployeeId) {
+          return true;
+        }
+
+        return false;
+      });
 
       // Keep limit at 20 after client-side filter
       filteredData = filteredData.slice(0, 20);

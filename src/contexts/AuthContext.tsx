@@ -219,6 +219,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Create audit log entry for login
       try {
+        // Fetch user IP (best effort)
+        let userIp = "Unknown";
+        try {
+          const ipResponse = await fetch("https://api.ipify.org?format=json");
+          const ipData = await ipResponse.json();
+          userIp = ipData.ip;
+        } catch (ipError) {
+          console.warn("[AuthContext] Could not fetch IP address");
+        }
+
         await supabase.rpc("create_audit_log", {
           p_action_type: "login",
           p_target_type: "user",
@@ -227,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           p_details: {
             timestamp: new Date().toISOString(),
             user_agent: navigator.userAgent,
+            ip: userIp,
           },
           p_company_id: companyId,
         });

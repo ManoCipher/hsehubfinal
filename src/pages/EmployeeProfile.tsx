@@ -1919,12 +1919,40 @@ export default function EmployeeProfile() {
 
       if (error) throw error;
 
+      // Log to employee_activity_logs
       await logActivity(
         "Created task",
         "create",
         `Task created: ${newTaskTitle}`,
         { taskId: data.id, taskTitle: newTaskTitle }
       );
+
+      // ALSO log to audit_logs for Super Admin Activity tab
+      console.log("🔵 [EMPLOYEE PROFILE TASK] Creating audit log...");
+      try {
+        const { data: logResult, error: logError } = await supabase.rpc("create_audit_log", {
+          p_action_type: "assign_task",
+          p_target_type: "task",
+          p_target_id: data.id,
+          p_target_name: newTaskTitle,
+          p_details: {
+            assignee_id: id,
+            assigned_to: employee?.full_name || "Unknown Employee",
+            priority: newTaskPriority,
+            due_date: newTaskDueDate?.toISOString().split("T")[0] || null,
+            created_from: "employee_profile"
+          },
+          p_company_id: companyId,
+        });
+        
+        if (logError) {
+          console.error("❌ [EMPLOYEE PROFILE TASK] Audit log error:", logError);
+        } else {
+          console.log("✅ [EMPLOYEE PROFILE TASK] Audit log created! ID:", logResult);
+        }
+      } catch (auditErr) {
+        console.error("❌ [EMPLOYEE PROFILE TASK] Exception:", auditErr);
+      }
 
       setTasks([data, ...tasks]);
       setNewTaskTitle("");
@@ -1958,6 +1986,32 @@ export default function EmployeeProfile() {
           newStatus,
         }
       );
+
+      // ALSO log to audit_logs for Super Admin Activity tab
+      const actionType = newStatus === "completed" ? "complete_task" : "reopen_task";
+      console.log(`🔵 [EMPLOYEE PROFILE TASK STATUS] Logging ${actionType}...`);
+      try {
+        const { data: logResult, error: logError } = await supabase.rpc("create_audit_log", {
+          p_action_type: actionType,
+          p_target_type: "task",
+          p_target_id: task.id,
+          p_target_name: task.title,
+          p_details: {
+            old_status: task.status,
+            new_status: newStatus,
+            updated_from: "employee_profile"
+          },
+          p_company_id: companyId,
+        });
+        
+        if (logError) {
+          console.error(`❌ [EMPLOYEE PROFILE TASK STATUS] Audit log error:`, logError);
+        } else {
+          console.log(`✅ [EMPLOYEE PROFILE TASK STATUS] Audit log created! ID:`, logResult);
+        }
+      } catch (auditErr) {
+        console.error(`❌ [EMPLOYEE PROFILE TASK STATUS] Exception:`, auditErr);
+      }
 
       setTasks(
         tasks.map((t) => (t.id === task.id ? { ...t, status: newStatus } : t))

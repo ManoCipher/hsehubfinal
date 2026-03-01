@@ -39,6 +39,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuditLog } from "@/hooks/useAuditLog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,6 +57,7 @@ export default function Audits() {
   const { hasDetailedPermission } = usePermissions();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { logAction } = useAuditLog();
 
   const [audits, setAudits] = useState<any[]>([]);
   const [isoStandards, setIsoStandards] = useState<any[]>([]);
@@ -179,6 +181,46 @@ export default function Audits() {
 
       // Generate checklist items from ISO criteria
       await generateChecklistItems(auditData.id, formData.iso_code);
+
+      // Log audit action
+      console.log("🔵 [AUDIT LOG] Starting audit log creation...");
+      console.log("🔵 [AUDIT LOG] Parameters:", {
+        audit_id: auditData.id,
+        audit_title: formData.title,
+        company_id: companyId,
+        iso_code: formData.iso_code
+      });
+      
+      try {
+        const { data: logResult, error: logError } = await supabase.rpc("create_audit_log", {
+          p_action_type: "create_audit",
+          p_target_type: "audit",
+          p_target_id: auditData.id,
+          p_target_name: formData.title,
+          p_details: {
+            iso_code: formData.iso_code,
+            scheduled_date: formData.scheduled_date,
+            responsible_person_id: formData.responsible_person_id
+          },
+          p_company_id: companyId,
+        });
+        
+        if (logError) {
+          console.error("❌ [AUDIT LOG] RPC Error:", logError);
+        } else {
+          console.log("✅ [AUDIT LOG] Created! Log ID:", logResult);
+          
+          // Verify the log was created
+          const { data: verifyLog } = await supabase
+            .from("audit_logs")
+            .select("*")
+            .eq("id", logResult)
+            .single();
+          console.log("🔍 [AUDIT LOG] Verification:", verifyLog);
+        }
+      } catch (auditLogErr) {
+        console.error("❌ [AUDIT LOG] Exception:", auditLogErr);
+      }
 
       toast({
         title: "Success",
@@ -327,6 +369,15 @@ export default function Audits() {
         .eq("id", deleteAudit.id);
 
       if (error) throw error;
+
+      // Log audit deletion
+      logAction({
+        action: "delete_audit",
+        targetType: "audit",
+        targetId: deleteAudit.id,
+        targetName: deleteAudit.title,
+        details: { iso_code: deleteAudit.iso_code }
+      });
 
       toast({
         title: "Success",

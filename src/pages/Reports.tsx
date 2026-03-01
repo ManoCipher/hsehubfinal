@@ -3,6 +3,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useNavigate } from "react-router-dom";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
   Download,
   Filter,
@@ -29,7 +31,7 @@ import {
 import { Responsive, WidthProvider } from "react-grid-layout/legacy";
 import "react-grid-layout/css/styles.css";
 
-// Wrap ResponsiveGridLayout with WidthProvider - measureBeforeMount prevents 0-width flash
+// Wrap ResponsiveGridLayout with WidthProvider
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
 import { Button } from "@/components/ui/button";
@@ -298,19 +300,25 @@ export default function Reports() {
   };
 
   // Save custom reports to localStorage
-  const saveCustomReports = (reports: ReportConfig[]) => {
+  const saveCustomReports = async (reports: ReportConfig[]) => {
     try {
       localStorage.setItem('hse_custom_reports', JSON.stringify(reports));
       setCustomReports(reports);
 
-      // Log action
-      logAction({
-        action: "update_custom_reports",
-        targetType: "reports",
-        targetId: "custom_reports",
-        targetName: "Custom Reports Configuration",
-        details: { count: reports.length }
-      });
+      // Log action (using direct RPC like login)
+      try {
+        await supabase.rpc("create_audit_log", {
+          p_action_type: "update_custom_reports",
+          p_target_type: "reports",
+          p_target_id: "custom_reports",
+          p_target_name: "Custom Reports Configuration",
+          p_details: { count: reports.length },
+          p_company_id: companyId,
+        });
+        console.log("✅ Custom reports update log created, count:", reports.length);
+      } catch (auditLogErr) {
+        console.error("❌ Failed to create reports log:", auditLogErr);
+      }
     } catch (error) {
       console.error('Error saving custom reports:', error);
     }
@@ -320,6 +328,10 @@ export default function Reports() {
     if (!companyId) return;
 
     try {
+      // Fetch counts from all HSE modules:
+      // - Measures: Corrective/preventive actions from risks, audits, and incidents
+      // - Audits: Compliance checks and inspections (ISO standards)
+      // - Health Check-ups: Employee medical examinations (G-Investigations)
       const [
         employeesRes,
         risksRes,
@@ -327,11 +339,13 @@ export default function Reports() {
         tasksRes,
         incidentsRes,
         measuresRes,
+        riskMeasuresRes,
         trainingsRes,
         checkUpsRes,
         completedAuditsRes,
         completedTasksRes,
         completedMeasuresRes,
+        completedRiskMeasuresRes,
         openIncidentsRes,
         trainingRes,
       ] = await Promise.all([
@@ -360,11 +374,15 @@ export default function Reports() {
           .select("id", { count: "exact", head: true })
           .eq("company_id", companyId),
         supabase
+          .from("risk_assessment_measures")
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", companyId),
+        supabase
           .from("courses")
           .select("id", { count: "exact", head: true })
           .eq("company_id", companyId),
         supabase
-          .from("employee_checkups")
+          .from("health_checkups")
           .select("id", { count: "exact", head: true })
           .eq("company_id", companyId),
         supabase
@@ -382,6 +400,11 @@ export default function Reports() {
           .select("id", { count: "exact", head: true })
           .eq("company_id", companyId)
           .eq("status", "completed"),
+        supabase
+          .from("risk_assessment_measures")
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", companyId)
+          .eq("progress_status", "completed"),
         supabase
           .from("incidents" as any)
           .select("id", { count: "exact", head: true })
@@ -407,12 +430,12 @@ export default function Reports() {
         totalAudits: auditsRes.count || 0,
         totalTasks: tasksRes.count || 0,
         totalIncidents: incidentsRes.count || 0,
-        totalMeasures: measuresRes.count || 0,
+        totalMeasures: (measuresRes.count || 0) + (riskMeasuresRes.count || 0),
         totalTrainings: trainingsRes.count || 0,
         totalCheckUps: checkUpsRes.count || 0,
         completedAudits: completedAuditsRes.count || 0,
         completedTasks: completedTasksRes.count || 0,
-        completedMeasures: completedMeasuresRes.count || 0,
+        completedMeasures: (completedMeasuresRes.count || 0) + (completedRiskMeasuresRes.count || 0),
         openIncidents: openIncidentsRes.count || 0,
         trainingCompliance: trainingComplianceRate,
       });
@@ -473,17 +496,69 @@ export default function Reports() {
     }
   };
 
-  const fetchChartData = () => {
-    // Mock data for demonstration - replace with actual data fetching
-    const mockData = [
-      { month: "Jan", incidents: 4, trainings: 12, tasks: 25 },
-      { month: "Feb", incidents: 7, trainings: 15, tasks: 28 },
-      { month: "Mar", incidents: 3, trainings: 18, tasks: 32 },
-      { month: "Apr", incidents: 5, trainings: 14, tasks: 27 },
-      { month: "May", incidents: 6, trainings: 20, tasks: 35 },
-      { month: "Jun", incidents: 2, trainings: 22, tasks: 38 },
-    ];
-    setChartData(mockData);
+  const fetchChartData = async () => {
+    if (!companyId) return;
+
+    try {
+      // Calculate date range for last 6 months from current date
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setMonth(startDate.getMonth() - 6);
+      startDate.setDate(1); // Start from first day of month
+
+      // Generate array of last 6 months
+      const months: { label: string; startDate: Date; endDate: Date }[] = [];
+      for (let i = 5; i >= 0; i--) {
+        const monthDate = new Date();
+        monthDate.setMonth(monthDate.getMonth() - i);
+        const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+        const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59);
+        
+        months.push({
+          label: monthStart.toLocaleDateString('en-US', { month: 'short' }),
+          startDate: monthStart,
+          endDate: monthEnd,
+        });
+      }
+
+      // Fetch incidents, trainings, and tasks for each month
+      const chartDataPromises = months.map(async (month) => {
+        const [incidentsRes, trainingsRes, tasksRes] = await Promise.all([
+          supabase
+            .from("incidents")
+            .select("id", { count: "exact", head: true })
+            .eq("company_id", companyId)
+            .gte("incident_date", month.startDate.toISOString())
+            .lte("incident_date", month.endDate.toISOString()),
+          supabase
+            .from("training_records")
+            .select("id", { count: "exact", head: true })
+            .eq("company_id", companyId)
+            .gte("created_at", month.startDate.toISOString())
+            .lte("created_at", month.endDate.toISOString()),
+          supabase
+            .from("tasks")
+            .select("id", { count: "exact", head: true })
+            .eq("company_id", companyId)
+            .gte("created_at", month.startDate.toISOString())
+            .lte("created_at", month.endDate.toISOString()),
+        ]);
+
+        return {
+          month: month.label,
+          incidents: incidentsRes.count || 0,
+          trainings: trainingsRes.count || 0,
+          tasks: tasksRes.count || 0,
+        };
+      });
+
+      const data = await Promise.all(chartDataPromises);
+      setChartData(data);
+    } catch (error) {
+      console.error("Error fetching chart data:", error);
+      // Fallback to empty data on error
+      setChartData([]);
+    }
   };
 
   const exportReport = () => {
@@ -496,10 +571,278 @@ export default function Reports() {
       });
       return;
     }
-    
+
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pageW = doc.internal.pageSize.getWidth();
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
+    const timeStr = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+
+    // ── Header bar ──────────────────────────────────────────────
+    doc.setFillColor(79, 70, 229); // indigo-600
+    doc.rect(0, 0, pageW, 22, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("HSE Hub – Safety Management", 14, 10);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Generated: ${dateStr} at ${timeStr}`, 14, 17);
+    doc.text(`Date range: ${dateRange.replace(/-/g, " ")}`, pageW - 14, 17, { align: "right" });
+
+    // ── Report title ────────────────────────────────────────────
+    doc.setTextColor(30, 30, 30);
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text(reportName || "Safety Report", 14, 34);
+
+    // Section label
+    const sectionLabel = navSections.find(s => s.id === activeSection)?.name || activeSection;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Section: ${sectionLabel}`, 14, 41);
+
+    let cursorY = 50;
+
+    // ── Helper: section heading ──────────────────────────────────
+    const sectionHeading = (title: string) => {
+      doc.setFillColor(243, 244, 246);
+      doc.rect(14, cursorY, pageW - 28, 8, "F");
+      doc.setTextColor(55, 65, 81);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text(title, 16, cursorY + 5.5);
+      cursorY += 12;
+    };
+
+    // ── Build content based on active section ───────────────────
+    if (activeSection === "overview") {
+      sectionHeading("Key Performance Indicators");
+      autoTable(doc, {
+        startY: cursorY,
+        head: [["Metric", "Value"]],
+        body: [
+          ["Total Employees", stats.totalEmployees],
+          ["Risk Assessments (GBU)", stats.totalRiskAssessments],
+          ["Safety Audits", stats.totalAudits],
+          ["Completed Audits", stats.completedAudits],
+          ["Incidents", stats.totalIncidents],
+          ["Open Incidents", stats.openIncidents],
+          ["Closed Incidents", stats.totalIncidents - stats.openIncidents],
+          ["Training Courses", stats.totalTrainings],
+          ["Training Compliance", `${stats.trainingCompliance}%`],
+          ["Measures", stats.totalMeasures],
+          ["Completed Measures", stats.completedMeasures],
+          ["In-Progress Measures", stats.totalMeasures - stats.completedMeasures],
+          ["Tasks", stats.totalTasks],
+          ["Completed Tasks", stats.completedTasks],
+          ["Health Check-ups", stats.totalCheckUps],
+        ],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 90 }, 1: { halign: "right" } },
+        margin: { left: 14, right: 14 },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+
+      if (chartData && chartData.length > 0) {
+        sectionHeading("Monthly Incident Trend");
+        autoTable(doc, {
+          startY: cursorY,
+          head: [["Month", "Incidents"]],
+          body: chartData.map((d: any) => [d.month || d.name || "", d.incidents ?? d.value ?? 0]),
+          styles: { fontSize: 9, cellPadding: 3 },
+          headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: "bold" },
+          alternateRowStyles: { fillColor: [249, 250, 251] },
+          margin: { left: 14, right: 14 },
+        });
+        cursorY = (doc as any).lastAutoTable.finalY + 10;
+      }
+    } else if (activeSection === "risk-assessments") {
+      sectionHeading("Risk Assessments Summary");
+      autoTable(doc, {
+        startY: cursorY,
+        head: [["Metric", "Value"]],
+        body: [
+          ["Total GBU Risk Assessments", stats.totalRiskAssessments],
+        ],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [234, 88, 12], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 90 }, 1: { halign: "right" } },
+        margin: { left: 14, right: 14 },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+    } else if (activeSection === "audits") {
+      sectionHeading("Safety Audits Summary");
+      const pending = stats.totalAudits - stats.completedAudits;
+      const completionRate = stats.totalAudits > 0 ? Math.round((stats.completedAudits / stats.totalAudits) * 100) : 0;
+      autoTable(doc, {
+        startY: cursorY,
+        head: [["Metric", "Value"]],
+        body: [
+          ["Total Audits", stats.totalAudits],
+          ["Completed", stats.completedAudits],
+          ["Pending / In Progress", pending],
+          ["Completion Rate", `${completionRate}%`],
+        ],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 90 }, 1: { halign: "right" } },
+        margin: { left: 14, right: 14 },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+    } else if (activeSection === "incidents") {
+      sectionHeading("Incidents Summary");
+      autoTable(doc, {
+        startY: cursorY,
+        head: [["Metric", "Value"]],
+        body: [
+          ["Total Incidents", stats.totalIncidents],
+          ["Open / Under Investigation", stats.openIncidents],
+          ["Closed / Resolved", stats.totalIncidents - stats.openIncidents],
+        ],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [220, 38, 38], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 90 }, 1: { halign: "right" } },
+        margin: { left: 14, right: 14 },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+    } else if (activeSection === "trainings") {
+      sectionHeading("Training Summary");
+      autoTable(doc, {
+        startY: cursorY,
+        head: [["Metric", "Value"]],
+        body: [
+          ["Total Training Courses", stats.totalTrainings],
+          ["Overall Compliance Rate", `${stats.trainingCompliance}%`],
+        ],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 90 }, 1: { halign: "right" } },
+        margin: { left: 14, right: 14 },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+
+      if (trainingMatrix && trainingMatrix.length > 0) {
+        sectionHeading("Employee Training Matrix");
+        autoTable(doc, {
+          startY: cursorY,
+          head: [["Employee", "Required", "Completed", "Expired", "Compliance", "Status"]],
+          body: trainingMatrix.map(item => [
+            item.employee_name,
+            item.total_required,
+            item.completed,
+            item.expired,
+            `${item.compliance_rate}%`,
+            item.compliance_rate >= 80 ? "Compliant" : item.compliance_rate >= 50 ? "Needs Attention" : "Non-Compliant",
+          ]),
+          styles: { fontSize: 8, cellPadding: 2.5 },
+          headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: "bold" },
+          alternateRowStyles: { fillColor: [249, 250, 251] },
+          columnStyles: {
+            0: { cellWidth: 50 },
+            5: { fontStyle: "bold" },
+          },
+          didDrawCell: (data: any) => {
+            if (data.column.index === 5 && data.section === "body") {
+              const val = String(data.cell.raw);
+              if (val === "Compliant") doc.setTextColor(22, 163, 74);
+              else if (val === "Needs Attention") doc.setTextColor(202, 138, 4);
+              else doc.setTextColor(220, 38, 38);
+            }
+          },
+          margin: { left: 14, right: 14 },
+        });
+        cursorY = (doc as any).lastAutoTable.finalY + 10;
+      }
+    } else if (activeSection === "measures") {
+      sectionHeading("Measures Summary");
+      const completionRate = stats.totalMeasures > 0 ? Math.round((stats.completedMeasures / stats.totalMeasures) * 100) : 0;
+      autoTable(doc, {
+        startY: cursorY,
+        head: [["Metric", "Value"]],
+        body: [
+          ["Total Measures", stats.totalMeasures],
+          ["Completed", stats.completedMeasures],
+          ["In Progress", stats.totalMeasures - stats.completedMeasures],
+          ["Completion Rate", `${completionRate}%`],
+        ],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [124, 58, 237], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 90 }, 1: { halign: "right" } },
+        margin: { left: 14, right: 14 },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+    } else if (activeSection === "tasks") {
+      sectionHeading("Tasks Summary");
+      const completionRate = stats.totalTasks > 0 ? Math.round((stats.completedTasks / stats.totalTasks) * 100) : 0;
+      autoTable(doc, {
+        startY: cursorY,
+        head: [["Metric", "Value"]],
+        body: [
+          ["Total Tasks", stats.totalTasks],
+          ["Completed", stats.completedTasks],
+          ["Pending", stats.totalTasks - stats.completedTasks],
+          ["Completion Rate", `${completionRate}%`],
+        ],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [99, 102, 241], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 90 }, 1: { halign: "right" } },
+        margin: { left: 14, right: 14 },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+    } else if (activeSection === "checkups") {
+      sectionHeading("Health Check-ups Summary");
+      autoTable(doc, {
+        startY: cursorY,
+        head: [["Metric", "Value"]],
+        body: [
+          ["Total Health Check-ups", stats.totalCheckUps],
+        ],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [13, 148, 136], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 90 }, 1: { halign: "right" } },
+        margin: { left: 14, right: 14 },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // ── Footer on every page ─────────────────────────────────────
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Page ${i} of ${totalPages}`, pageW / 2, doc.internal.pageSize.getHeight() - 6, { align: "center" });
+      doc.text("HSE Hub – Confidential", 14, doc.internal.pageSize.getHeight() - 6);
+      doc.text(dateStr, pageW - 14, doc.internal.pageSize.getHeight() - 6, { align: "right" });
+    }
+
+    // ── Save ─────────────────────────────────────────────────────
+    const fileName = `${(reportName || "safety-report").toLowerCase().replace(/\s+/g, "-")}_${sectionLabel.toLowerCase().replace(/\s+/g, "-")}_${now.toISOString().slice(0, 10)}.pdf`;
+    doc.save(fileName);
+
     toast({
-      title: "Coming Soon",
-      description: "PDF export functionality will be available soon",
+      title: "✅ PDF Exported",
+      description: `"${reportName}" has been downloaded as ${fileName}`,
+    });
+
+    logAction({
+      action: "export_report",
+      targetType: "report",
+      targetId: activeSection,
+      targetName: reportName,
+      details: { section: activeSection, dateRange, fileName },
     });
   };
 
@@ -570,24 +913,9 @@ export default function Reports() {
 
           return Object.entries(grouped).map(([name, value]) => ({ name, value }));
         } else if (groupBy === "location") {
-          // Location doesn't exist on employees table, use department as fallback
-          const { data, error } = await supabase
-            .from("employees")
-            .select("department_id, departments(name)")
-            .eq("company_id", companyId);
-
-          if (error) {
-            console.error("Error fetching employee location data:", error);
-            return [];
-          }
-
-          const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
-            const deptName = item.departments?.name || "Unassigned";
-            acc[deptName] = (acc[deptName] || 0) + 1;
-            return acc;
-          }, {});
-
-          return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+          // Employees don't have location field - return empty
+          console.warn("Employees table does not have a location field");
+          return [{ name: "No Location Data", value: 0 }];
         } else if (groupBy === "created_at") {
           const { data, error } = await supabase
             .from("employees")
@@ -657,30 +985,58 @@ export default function Reports() {
       // Special handling for Measures
       if (metric === "measures") {
         if (groupBy === "department") {
-          // Measures might not have direct department, join via responsible person -> department
-          // Note: using 'employees!responsible_person_id' valid if FK exists, else try 'employees'
-          const { data, error } = await supabase
-            .from("measures" as any)
-            .select(`
-              responsible_person_id,
-              responsible_person:employees!responsible_person_id(
-                departments(name)
-              )
-            `)
-            .eq("company_id", companyId);
+          // Query BOTH measures tables and combine by department
+          const promises = [];
+          
+          // Main measures table
+          promises.push(
+            supabase
+              .from("measures" as any)
+              .select(`
+                responsible_person_id,
+                responsible_person:employees!responsible_person_id(
+                  departments(name)
+                )
+              `)
+              .eq("company_id", companyId)
+          );
+          
+          // Risk assessment measures table
+          promises.push(
+            supabase
+              .from("risk_assessment_measures")
+              .select(`
+                responsible_person,
+                responsible_employee:employees!responsible_person(
+                  departments(name)
+                )
+              `)
+              .eq("company_id", companyId)
+          );
 
-          if (error) {
-            console.error("Error fetching measures department:", error);
-            return [];
+          const [measuresRes, riskMeasuresRes] = await Promise.all(promises);
+
+          if (measuresRes.error) {
+            console.error("Error fetching measures department:", measuresRes.error);
+          }
+          if (riskMeasuresRes.error) {
+            console.error("Error fetching risk measures department:", riskMeasuresRes.error);
           }
 
-          const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
-            // item.responsible_person is the joined employee object
-            // item.responsible_person.departments is the joined department object
+          // Combine and group by department
+          const grouped: Record<string, number> = {};
+          
+          // Add data from main measures table
+          (measuresRes.data || []).forEach((item: any) => {
             const dept = item.responsible_person?.departments?.name || "Unassigned";
-            acc[dept] = (acc[dept] || 0) + 1;
-            return acc;
-          }, {});
+            grouped[dept] = (grouped[dept] || 0) + 1;
+          });
+          
+          // Add data from risk_assessment_measures table
+          (riskMeasuresRes.data || []).forEach((item: any) => {
+            const dept = item.responsible_employee?.departments?.name || "Unassigned";
+            grouped[dept] = (grouped[dept] || 0) + 1;
+          });
 
           return Object.entries(grouped).map(([name, value]) => ({ name, value }));
         }
@@ -708,13 +1064,27 @@ export default function Reports() {
             return Object.entries(grouped).map(([name, value]) => ({ name, value }));
           }
           // Fallthrough for other incident groupings
-          const incidentGroupCol = groupBy === "category" ? "incident_type" : (groupBy || "investigation_status");
+          // Handle different incident groupings
+          let incidentGroupCol: string;
+          if (groupBy === "category") {
+            incidentGroupCol = "incident_type";
+          } else if (groupBy === "investigation_status" || groupBy === "status") {
+            incidentGroupCol = "investigation_status";
+          } else if (groupBy === "incident_type") {
+            incidentGroupCol = "incident_type";
+          } else {
+            incidentGroupCol = groupBy || "investigation_status";
+          }
+          
           const { data, error } = await supabase
             .from("incidents")
             .select(incidentGroupCol)
             .eq("company_id", companyId);
 
-          if (error) return [];
+          if (error) {
+            console.error("Error fetching incidents:", error);
+            return [];
+          }
           const groupedIncidents = (data || []).reduce((acc: Record<string, number>, item: any) => {
             const key = item[incidentGroupCol] || "Unknown";
             acc[key] = (acc[key] || 0) + 1;
@@ -724,56 +1094,202 @@ export default function Reports() {
 
         case "audits":
           table = "audits";
-          if (groupBy === "category") {
+          // Map groupBy to actual column names
+          if (groupBy === "iso_code") {
+            groupColumn = "iso_code";
+          } else if (groupBy === "status") {
+            groupColumn = "status";
+          } else if (groupBy === "category") {
             groupColumn = "audit_type";
           } else {
             groupColumn = groupBy || "status";
           }
           break;
         case "trainings":
-          // Courses are catalog items
           {
-            const { data, error } = await supabase
-              .from("courses")
-              .select("id, name")
-              .eq("company_id", companyId);
+            // Query training_records table
+            if (groupBy === "employee_id") {
+              // Training Compliance by Employee
+              const { data, error } = await supabase
+                .from("training_records")
+                .select("employee_id, employees(full_name), status")
+                .eq("company_id", companyId);
 
-            if (error) {
-              console.error("Error fetching courses data:", error);
-              return [];
+              if (error) {
+                console.error("Error fetching training by employee:", error);
+                return [];
+              }
+
+              // Group by employee and calculate completion percentage
+              const employeeStats: Record<string, { total: number; completed: number }> = {};
+              
+              (data || []).forEach((item: any) => {
+                const empName = item.employees?.full_name || "Unassigned";
+                if (!employeeStats[empName]) {
+                  employeeStats[empName] = { total: 0, completed: 0 };
+                }
+                employeeStats[empName].total += 1;
+                if (item.status === "completed") {
+                  employeeStats[empName].completed += 1;
+                }
+              });
+
+              return Object.entries(employeeStats).map(([name, stats]) => ({
+                name,
+                value: Math.round((stats.completed / stats.total) * 100) // Completion percentage
+              }));
+            } else if (groupBy === "status") {
+              // Training by status
+              const { data, error } = await supabase
+                .from("training_records")
+                .select("status")
+                .eq("company_id", companyId);
+
+              if (error) {
+                console.error("Error fetching training by status:", error);
+                return [];
+              }
+
+              const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+                const key = item.status || "Unknown";
+                acc[key] = (acc[key] || 0) + 1;
+                return acc;
+              }, {});
+
+              return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+            } else if (groupBy === "created_at") {
+              // Training trends over time
+              const { data, error } = await supabase
+                .from("training_records")
+                .select("created_at")
+                .eq("company_id", companyId)
+                .gte("created_at", startDate)
+                .lte("created_at", endDate);
+
+              if (error) {
+                console.error("Error fetching training trends:", error);
+                return [];
+              }
+
+              const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+                if (!item.created_at) return acc;
+                const date = new Date(item.created_at);
+                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                acc[monthKey] = (acc[monthKey] || 0) + 1;
+                return acc;
+              }, {});
+
+              return Object.entries(grouped)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([name, value]) => ({ name, value }));
             }
-            return (data || []).map(course => ({
-              name: course.name,
-              value: 1, // Just listing them? Or should we count completions? 
-              // The original list logic seemed to just return 1 per course. 
-              // But 'Training Compliance' report suggests we want compliance stats.
-              // Let's keep original simple behavior for now or it gets too complex.
-            }));
+            return [];
           }
           break;
         case "measures":
-          table = "measures";
-          groupColumn = groupBy || "status";
+          {
+            // Query BOTH measures tables and combine the data
+            const promises = [];
+            
+            // Main measures table
+            promises.push(
+              supabase
+                .from("measures" as any)
+                .select("status")
+                .eq("company_id", companyId)
+                .gte("created_at", startDate)
+                .lte("created_at", endDate)
+            );
+            
+            // Risk assessment measures table
+            promises.push(
+              supabase
+                .from("risk_assessment_measures")
+                .select("progress_status")
+                .eq("company_id", companyId)
+                .gte("created_at", startDate)
+                .lte("created_at", endDate)
+            );
+
+            const [measuresRes, riskMeasuresRes] = await Promise.all(promises);
+
+            if (measuresRes.error) {
+              console.error("Error fetching measures:", measuresRes.error);
+            }
+            if (riskMeasuresRes.error) {
+              console.error("Error fetching risk measures:", riskMeasuresRes.error);
+            }
+
+            // Combine and group data
+            const combined: Record<string, number> = {};
+            
+            // Add data from main measures table
+            (measuresRes.data || []).forEach((item: any) => {
+              const key = item.status || "Unknown";
+              combined[key] = (combined[key] || 0) + 1;
+            });
+            
+            // Add data from risk_assessment_measures table (map progress_status to status)
+            (riskMeasuresRes.data || []).forEach((item: any) => {
+              // Map progress_status names to match status names
+              let key = item.progress_status || "Unknown";
+              // Map risk assessment statuses to standard measure statuses
+              if (key === "not_started") key = "planned";
+              if (key === "blocked") key = "cancelled";
+              combined[key] = (combined[key] || 0) + 1;
+            });
+
+            return Object.entries(combined).map(([name, value]) => ({ name, value }));
+          }
           break;
         case "checkups":
           {
-            const { data, error } = await supabase
-              .from("employee_checkups") // Changed from health_checkups to employee_checkups as per fetchReportData usage (line 241)
-              .select("status")
-              .eq("company_id", companyId);
+            if (groupBy === "status") {
+              // Checkups by status
+              const { data, error } = await supabase
+                .from("health_checkups")
+                .select("status")
+                .eq("company_id", companyId);
 
-            if (error) {
-              console.error("Error fetching health checkups data:", error);
-              return [];
+              if (error) {
+                console.error("Error fetching health checkups data:", error);
+                return [];
+              }
+
+              const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+                const key = item.status || "Unknown";
+                acc[key] = (acc[key] || 0) + 1;
+                return acc;
+              }, {});
+
+              return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+            } else if (groupBy === "created_at") {
+              // Checkups over time
+              const { data, error } = await supabase
+                .from("health_checkups")
+                .select("created_at")
+                .eq("company_id", companyId)
+                .gte("created_at", startDate)
+                .lte("created_at", endDate);
+
+              if (error) {
+                console.error("Error fetching checkups over time:", error);
+                return [];
+              }
+
+              const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
+                if (!item.created_at) return acc;
+                const date = new Date(item.created_at);
+                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                acc[monthKey] = (acc[monthKey] || 0) + 1;
+                return acc;
+              }, {});
+
+              return Object.entries(grouped)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([name, value]) => ({ name, value }));
             }
-
-            const grouped = (data || []).reduce((acc: Record<string, number>, item: any) => {
-              const key = item.status || "Unknown";
-              acc[key] = (acc[key] || 0) + 1;
-              return acc;
-            }, {});
-
-            return Object.entries(grouped).map(([name, value]) => ({ name, value }));
+            return [];
           }
           break;
         default:
@@ -984,10 +1500,99 @@ export default function Reports() {
       });
       return;
     }
-    
+
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pageW = doc.internal.pageSize.getWidth();
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
+    const timeStr = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+
+    // Header bar
+    doc.setFillColor(79, 70, 229);
+    doc.rect(0, 0, pageW, 22, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("HSE Hub – Safety Management", 14, 10);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Generated: ${dateStr} at ${timeStr}`, 14, 17);
+
+    // Report Title
+    doc.setTextColor(30, 30, 30);
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text(config.title, 14, 34);
+
+    // Metadata
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Metric: ${config.metric}  |  Chart: ${config.chartType}  |  Group by: ${config.groupBy}`, 14, 41);
+
+    let cursorY = 52;
+
+    // Config summary table
+    autoTable(doc, {
+      startY: cursorY,
+      head: [["Property", "Value"]],
+      body: [
+        ["Metric", config.metric],
+        ["Chart Type", config.chartType],
+        ["Group By", config.groupBy],
+        ["Date Range", config.dateRange?.type?.replace(/_/g, " ") || "All time"],
+        ...(config.incidentType ? [["Incident Type", config.incidentType]] : []),
+        ...(config.auditTemplate ? [["Audit Template", config.auditTemplate]] : []),
+      ],
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: "bold" },
+      alternateRowStyles: { fillColor: [249, 250, 251] },
+      columnStyles: { 0: { fontStyle: "bold", cellWidth: 70 } },
+      margin: { left: 14, right: 14 },
+    });
+    cursorY = (doc as any).lastAutoTable.finalY + 10;
+
+    // Data table if available
+    if (config.data && config.data.length > 0) {
+      doc.setFillColor(243, 244, 246);
+      doc.rect(14, cursorY, pageW - 28, 8, "F");
+      doc.setTextColor(55, 65, 81);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text("Report Data", 16, cursorY + 5.5);
+      cursorY += 12;
+
+      const dataKeys = Object.keys(config.data[0]);
+      autoTable(doc, {
+        startY: cursorY,
+        head: [dataKeys.map(k => k.charAt(0).toUpperCase() + k.slice(1))],
+        body: config.data.map(row => dataKeys.map(k => String(row[k] ?? ""))),
+        styles: { fontSize: 8, cellPadding: 2.5 },
+        headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        margin: { left: 14, right: 14 },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Footer
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Page ${i} of ${totalPages}`, pageW / 2, doc.internal.pageSize.getHeight() - 6, { align: "center" });
+      doc.text("HSE Hub – Confidential", 14, doc.internal.pageSize.getHeight() - 6);
+      doc.text(dateStr, pageW - 14, doc.internal.pageSize.getHeight() - 6, { align: "right" });
+    }
+
+    const fileName = `${config.title.toLowerCase().replace(/\s+/g, "-")}_${now.toISOString().slice(0, 10)}.pdf`;
+    doc.save(fileName);
+
     toast({
-      title: "Exporting Report",
-      description: `Exporting "${config.title}"...`,
+      title: "✅ Report Exported",
+      description: `"${config.title}" downloaded as ${fileName}`,
     });
   };
 
@@ -1278,16 +1883,18 @@ function OverviewSection({
 
   // Mounted state to suppress CSS transition glitch on first render
   const [isMounted, setIsMounted] = useState(false);
+  const isInitialMountRef = useRef(true);
   const isDraggingRef = useRef(false);
   const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
+  const layoutsRef = useRef<{ [key: string]: any[] }>({});
+  const hiddenCardsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     // Small delay to let the grid measure its container width before enabling transitions
     const timer = setTimeout(() => {
       setIsMounted(true);
-      // Trigger a resize so WidthProvider recalculates container width
-      window.dispatchEvent(new Event('resize'));
-    }, 150);
+      isInitialMountRef.current = false;
+    }, 200);
     return () => clearTimeout(timer);
   }, []);
 
@@ -1322,6 +1929,15 @@ function OverviewSection({
       return next;
     });
   }, []);
+
+  // Reset initial mount flag when hiddenCards changes (grid will remount with new key)
+  useEffect(() => {
+    isInitialMountRef.current = true;
+    const timer = setTimeout(() => {
+      isInitialMountRef.current = false;
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [hiddenCards]);
 
   // Standard card base positions (y offsets for lg)
   const standardCardDefaults = useMemo(() => ({
@@ -1469,20 +2085,49 @@ function OverviewSection({
     });
   }, [customReports, standardCardDefaults]);
 
+  // Keep refs in sync with state to avoid dependency issues in callbacks
+  useEffect(() => {
+    layoutsRef.current = layouts;
+  }, [layouts]);
+
+  useEffect(() => {
+    hiddenCardsRef.current = hiddenCards;
+  }, [hiddenCards]);
+
   // Save layouts to localStorage when they change (deferred during drag)
   const lastSavedLayoutRef = useRef<string>('');
   
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
+    // Skip processing during initial mount to avoid infinite loop
+    if (isInitialMountRef.current) return;
+    
     if (isDraggingRef.current) {
       // During drag, just store the pending layout but don't save yet
       pendingLayoutRef.current = allLayouts;
       return;
     }
+    
     // NOTE: Do NOT call setLayouts here — doing so triggers a re-render which causes
     // ResponsiveGridLayout to fire onLayoutChange again, creating an infinite loop.
     // Layout state is only updated on drag stop / resize stop.
     // Just persist to localStorage if something changed.
-    const serialized = JSON.stringify(allLayouts);
+    
+    // IMPORTANT: Merge with existing layouts to preserve hidden cards' positions
+    // allLayouts only contains visible cards, so we need to add back hidden ones
+    const mergedLayouts: { [key: string]: any[] } = {};
+    const currentLayouts = layoutsRef.current;
+    const currentHiddenCards = hiddenCardsRef.current;
+    
+    Object.keys(currentLayouts).forEach(bp => {
+      // Get current visible layout from allLayouts
+      const visibleLayout = allLayouts[bp] || [];
+      // Get hidden cards' positions from existing layouts
+      const hiddenLayout = (currentLayouts[bp] || []).filter((item: any) => currentHiddenCards.has(item.i));
+      // Merge both
+      mergedLayouts[bp] = [...visibleLayout, ...hiddenLayout];
+    });
+    
+    const serialized = JSON.stringify(mergedLayouts);
     if (serialized === lastSavedLayoutRef.current) return;
     lastSavedLayoutRef.current = serialized;
     try {
@@ -1501,9 +2146,20 @@ function OverviewSection({
     isDraggingRef.current = false;
     // Apply the pending layout that accumulated during drag
     if (pendingLayoutRef.current) {
-      const serialized = JSON.stringify(pendingLayoutRef.current);
+      // Merge with hidden cards to preserve their positions
+      const mergedLayouts: { [key: string]: any[] } = {};
+      const currentLayouts = layoutsRef.current;
+      const currentHiddenCards = hiddenCardsRef.current;
+      
+      Object.keys(currentLayouts).forEach(bp => {
+        const visibleLayout = pendingLayoutRef.current![bp] || [];
+        const hiddenLayout = (currentLayouts[bp] || []).filter((item: any) => currentHiddenCards.has(item.i));
+        mergedLayouts[bp] = [...visibleLayout, ...hiddenLayout];
+      });
+      
+      const serialized = JSON.stringify(mergedLayouts);
       lastSavedLayoutRef.current = serialized;
-      setLayouts(pendingLayoutRef.current);
+      setLayouts(mergedLayouts);
       try {
         localStorage.setItem(UNIFIED_LAYOUT_KEY, serialized);
       } catch (error) {
@@ -1515,12 +2171,19 @@ function OverviewSection({
 
   const handleResizeStop = useCallback((layout: any[], oldItem: any, newItem: any, placeholder: any, e: any, element: any) => {
     // On resize stop, update state using updater form (no stale closure on `layouts`)
+    const currentHiddenCards = hiddenCardsRef.current;
+    
     setLayouts(prev => {
       const updated = { ...prev };
-      // Match the breakpoint by layout length
+      // Match the breakpoint by layout length and merge with hidden cards
       Object.keys(updated).forEach(bp => {
-        if (updated[bp].length === layout.length) {
-          updated[bp] = layout;
+        const visibleCount = layout.filter(item => !currentHiddenCards.has(item.i)).length;
+        const prevVisibleCount = (updated[bp] || []).filter((item: any) => !currentHiddenCards.has(item.i)).length;
+        
+        if (visibleCount === prevVisibleCount) {
+          // This is the matching breakpoint
+          const hiddenLayout = (updated[bp] || []).filter((item: any) => currentHiddenCards.has(item.i));
+          updated[bp] = [...layout, ...hiddenLayout];
         }
       });
       const serialized = JSON.stringify(updated);
@@ -1631,6 +2294,7 @@ function OverviewSection({
 
       {/* Unified Resizable/Draggable Grid Layout (standard + custom cards together) */}
       <ResponsiveGridLayout
+        key={Array.from(hiddenCards).sort().join(',')}
         className={`layout${isMounted ? '' : ' no-transition'}`}
         layouts={visibleLayouts}
         breakpoints={{ lg: 1200, md: 996, sm: 768 }}
@@ -1885,6 +2549,16 @@ function DraggableGridSection({
   children,
 }: DraggableGridSectionProps) {
   const { toast } = useToast();
+  const isInitialMountRef = useRef(true);
+  const isDraggingRef = useRef(false);
+  const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
+  const lastSavedLayoutRef = useRef<string>('');
+  
+  useEffect(() => {
+    const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
+    return () => clearTimeout(timer);
+  }, []);
+  
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
     try {
       const saved = localStorage.getItem(SECTION_LAYOUT_KEYS[sectionId as keyof typeof SECTION_LAYOUT_KEYS]);
@@ -1899,15 +2573,58 @@ function DraggableGridSection({
 
   const handleLayoutChange = useCallback(
     (currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
-      setLayouts(allLayouts);
+      if (isInitialMountRef.current) return;
+      if (isDraggingRef.current) {
+        pendingLayoutRef.current = allLayouts;
+        return;
+      }
+      // Only persist if actually changed
+      const serialized = JSON.stringify(allLayouts);
+      if (serialized === lastSavedLayoutRef.current) return;
+      lastSavedLayoutRef.current = serialized;
       try {
-        localStorage.setItem(SECTION_LAYOUT_KEYS[sectionId as keyof typeof SECTION_LAYOUT_KEYS], JSON.stringify(allLayouts));
+        localStorage.setItem(SECTION_LAYOUT_KEYS[sectionId as keyof typeof SECTION_LAYOUT_KEYS], serialized);
       } catch (error) {
         console.error(`Error saving ${sectionId} layout:`, error);
       }
     },
     [sectionId]
   );
+
+  const handleDragStart = useCallback(() => {
+    isDraggingRef.current = true;
+  }, []);
+
+  const handleDragStop = useCallback(() => {
+    isDraggingRef.current = false;
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try {
+        localStorage.setItem(SECTION_LAYOUT_KEYS[sectionId as keyof typeof SECTION_LAYOUT_KEYS], serialized);
+      } catch (error) {
+        console.error(`Error saving ${sectionId} layout:`, error);
+      }
+      pendingLayoutRef.current = null;
+    }
+  }, [sectionId]);
+
+  const handleResizeStop = useCallback(() => {
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try {
+        localStorage.setItem(SECTION_LAYOUT_KEYS[sectionId as keyof typeof SECTION_LAYOUT_KEYS], serialized);
+      } catch (error) {
+        console.error(`Error saving ${sectionId} layout:`, error);
+      }
+      pendingLayoutRef.current = null;
+    }
+  }, [sectionId]);
 
   // Reset layout to default
   const onResetLayout = useCallback(() => {
@@ -1959,6 +2676,9 @@ function DraggableGridSection({
         preventCollision={false}
         autoSize={true}
         onLayoutChange={handleLayoutChange}
+        onDragStart={handleDragStart}
+        onDragStop={handleDragStop}
+        onResizeStop={handleResizeStop}
         draggableHandle=".drag-handle"
         isResizable={true}
         isDraggable={true}
@@ -2100,9 +2820,20 @@ function KPICard({
 // Sections with draggable card layouts
 function RiskAssessmentsSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
   const { toast } = useToast();
-  const defaultLayout = [
-    { i: "risk-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-  ];
+  const isInitialMountRef = useRef(true);
+  const isDraggingRef = useRef(false);
+  const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
+  const lastSavedLayoutRef = useRef<string>('');
+  const defaultLayout = {
+    lg: [{ i: "risk-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false }],
+    md: [{ i: "risk-total", x: 0, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false }],
+    sm: [{ i: "risk-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false }],
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
     try {
@@ -2111,20 +2842,50 @@ function RiskAssessmentsSection({ stats, chartData }: { stats: ReportStats; char
     } catch (error) {
       console.error('Error loading risk assessments layout:', error);
     }
-    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    return defaultLayout;
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
-    setLayouts(allLayouts);
+    if (isInitialMountRef.current) return;
+    if (isDraggingRef.current) {
+      pendingLayoutRef.current = allLayouts;
+      return;
+    }
+    const serialized = JSON.stringify(allLayouts);
+    if (serialized === lastSavedLayoutRef.current) return;
+    lastSavedLayoutRef.current = serialized;
     try {
-      localStorage.setItem('hse_layout_risk_assessments', JSON.stringify(allLayouts));
+      localStorage.setItem('hse_layout_risk_assessments', serialized);
     } catch (error) {
       console.error('Error saving risk assessments layout:', error);
     }
   }, []);
 
+  const handleDragStart = useCallback(() => { isDraggingRef.current = true; }, []);
+  const handleDragStop = useCallback(() => {
+    isDraggingRef.current = false;
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_risk_assessments', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+  const handleResizeStop = useCallback(() => {
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_risk_assessments', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+
   const resetLayout = useCallback(() => {
-    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    const defaultLayouts = defaultLayout;
     setLayouts(defaultLayouts);
     localStorage.removeItem('hse_layout_risk_assessments');
     toast({ title: "Layout Reset", description: "Risk Assessments layout has been reset to default" });
@@ -2150,12 +2911,16 @@ function RiskAssessmentsSection({ stats, chartData }: { stats: ReportStats; char
         cols={{ lg: 12, md: 10, sm: 6 }}
         rowHeight={70}
         onLayoutChange={handleLayoutChange}
+        onDragStart={handleDragStart}
+        onDragStop={handleDragStop}
+        onResizeStop={handleResizeStop}
         draggableHandle=".drag-handle"
         isResizable={true}
         isDraggable={true}
         margin={[12, 12]}
         containerPadding={[0, 0]}
-        compactType={null}
+        compactType="vertical"
+        preventCollision={false}
       >
         <div key="risk-total">
           <DraggableCard
@@ -2173,10 +2938,29 @@ function RiskAssessmentsSection({ stats, chartData }: { stats: ReportStats; char
 
 function AuditsSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
   const { toast } = useToast();
-  const defaultLayout = [
-    { i: "audit-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-    { i: "audit-completed", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-  ];
+  const isInitialMountRef = useRef(true);
+  const isDraggingRef = useRef(false);
+  const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
+  const lastSavedLayoutRef = useRef<string>('');
+  const defaultLayout = {
+    lg: [
+      { i: "audit-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "audit-completed", x: 6, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    md: [
+      { i: "audit-total", x: 0, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+      { i: "audit-completed", x: 5, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    sm: [
+      { i: "audit-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "audit-completed", x: 0, y: 2, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
     try {
@@ -2185,20 +2969,50 @@ function AuditsSection({ stats, chartData }: { stats: ReportStats; chartData: an
     } catch (error) {
       console.error('Error loading audits layout:', error);
     }
-    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    return defaultLayout;
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
-    setLayouts(allLayouts);
+    if (isInitialMountRef.current) return;
+    if (isDraggingRef.current) {
+      pendingLayoutRef.current = allLayouts;
+      return;
+    }
+    const serialized = JSON.stringify(allLayouts);
+    if (serialized === lastSavedLayoutRef.current) return;
+    lastSavedLayoutRef.current = serialized;
     try {
-      localStorage.setItem('hse_layout_audits', JSON.stringify(allLayouts));
+      localStorage.setItem('hse_layout_audits', serialized);
     } catch (error) {
       console.error('Error saving audits layout:', error);
     }
   }, []);
 
+  const handleDragStart = useCallback(() => { isDraggingRef.current = true; }, []);
+  const handleDragStop = useCallback(() => {
+    isDraggingRef.current = false;
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_audits', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+  const handleResizeStop = useCallback(() => {
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_audits', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+
   const resetLayout = useCallback(() => {
-    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    const defaultLayouts = defaultLayout;
     setLayouts(defaultLayouts);
     localStorage.removeItem('hse_layout_audits');
     toast({ title: "Layout Reset", description: "Audits layout has been reset to default" });
@@ -2209,7 +3023,7 @@ function AuditsSection({ stats, chartData }: { stats: ReportStats; chartData: an
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold mb-2">Safety Audits</h2>
-          <p className="text-muted-foreground">Audit completion and compliance. Drag cards to reposition, drag corners to resize.</p>
+          <p className="text-muted-foreground">Tracks compliance checks and ISO standard audits. This shows audit completion status and helps ensure regulatory compliance.</p>
         </div>
         <Button variant="outline" size="sm" onClick={resetLayout}>
           <RotateCcw className="w-4 h-4 mr-2" />
@@ -2224,12 +3038,16 @@ function AuditsSection({ stats, chartData }: { stats: ReportStats; chartData: an
         cols={{ lg: 12, md: 10, sm: 6 }}
         rowHeight={70}
         onLayoutChange={handleLayoutChange}
+        onDragStart={handleDragStart}
+        onDragStop={handleDragStop}
+        onResizeStop={handleResizeStop}
         draggableHandle=".drag-handle"
         isResizable={true}
         isDraggable={true}
         margin={[12, 12]}
         containerPadding={[0, 0]}
-        compactType={null}
+        compactType="vertical"
+        preventCollision={false}
       >
         <div key="audit-total">
           <DraggableCard
@@ -2256,11 +3074,32 @@ function AuditsSection({ stats, chartData }: { stats: ReportStats; chartData: an
 
 function IncidentsSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
   const { toast } = useToast();
-  const defaultLayout = [
-    { i: "incident-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-    { i: "incident-open", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-    { i: "incident-closed", x: 6, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-  ];
+  const isInitialMountRef = useRef(true);
+  const isDraggingRef = useRef(false);
+  const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
+  const lastSavedLayoutRef = useRef<string>('');
+  const defaultLayout = {
+    lg: [
+      { i: "incident-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "incident-open", x: 6, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "incident-closed", x: 0, y: 2, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    md: [
+      { i: "incident-total", x: 0, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+      { i: "incident-open", x: 5, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+      { i: "incident-closed", x: 0, y: 2, w: 5, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    sm: [
+      { i: "incident-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "incident-open", x: 0, y: 2, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "incident-closed", x: 0, y: 4, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
     try {
@@ -2269,20 +3108,50 @@ function IncidentsSection({ stats, chartData }: { stats: ReportStats; chartData:
     } catch (error) {
       console.error('Error loading incidents layout:', error);
     }
-    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    return defaultLayout;
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
-    setLayouts(allLayouts);
+    if (isInitialMountRef.current) return;
+    if (isDraggingRef.current) {
+      pendingLayoutRef.current = allLayouts;
+      return;
+    }
+    const serialized = JSON.stringify(allLayouts);
+    if (serialized === lastSavedLayoutRef.current) return;
+    lastSavedLayoutRef.current = serialized;
     try {
-      localStorage.setItem('hse_layout_incidents', JSON.stringify(allLayouts));
+      localStorage.setItem('hse_layout_incidents', serialized);
     } catch (error) {
       console.error('Error saving incidents layout:', error);
     }
   }, []);
 
+  const handleDragStart = useCallback(() => { isDraggingRef.current = true; }, []);
+  const handleDragStop = useCallback(() => {
+    isDraggingRef.current = false;
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_incidents', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+  const handleResizeStop = useCallback(() => {
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_incidents', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+
   const resetLayout = useCallback(() => {
-    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    const defaultLayouts = defaultLayout;
     setLayouts(defaultLayouts);
     localStorage.removeItem('hse_layout_incidents');
     toast({ title: "Layout Reset", description: "Incidents layout has been reset to default" });
@@ -2308,12 +3177,16 @@ function IncidentsSection({ stats, chartData }: { stats: ReportStats; chartData:
         cols={{ lg: 12, md: 10, sm: 6 }}
         rowHeight={70}
         onLayoutChange={handleLayoutChange}
+        onDragStart={handleDragStart}
+        onDragStop={handleDragStop}
+        onResizeStop={handleResizeStop}
         draggableHandle=".drag-handle"
         isResizable={true}
         isDraggable={true}
         margin={[12, 12]}
         containerPadding={[0, 0]}
-        compactType={null}
+        compactType="vertical"
+        preventCollision={false}
       >
         <div key="incident-total">
           <DraggableCard
@@ -2357,10 +3230,29 @@ function TrainingsSection({
   chartData: any[];
 }) {
   const { toast } = useToast();
-  const defaultLayout = [
-    { i: "training-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-    { i: "training-compliance", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-  ];
+  const isInitialMountRef = useRef(true);
+  const isDraggingRef = useRef(false);
+  const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
+  const lastSavedLayoutRef = useRef<string>('');
+  const defaultLayout = {
+    lg: [
+      { i: "training-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "training-compliance", x: 6, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    md: [
+      { i: "training-total", x: 0, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+      { i: "training-compliance", x: 5, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    sm: [
+      { i: "training-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "training-compliance", x: 0, y: 2, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
     try {
@@ -2369,15 +3261,45 @@ function TrainingsSection({
     } catch (error) {
       console.error('Error loading trainings layout:', error);
     }
-    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    return defaultLayout;
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
-    setLayouts(allLayouts);
+    if (isInitialMountRef.current) return;
+    if (isDraggingRef.current) {
+      pendingLayoutRef.current = allLayouts;
+      return;
+    }
+    const serialized = JSON.stringify(allLayouts);
+    if (serialized === lastSavedLayoutRef.current) return;
+    lastSavedLayoutRef.current = serialized;
     try {
-      localStorage.setItem('hse_layout_trainings', JSON.stringify(allLayouts));
+      localStorage.setItem('hse_layout_trainings', serialized);
     } catch (error) {
       console.error('Error saving trainings layout:', error);
+    }
+  }, []);
+
+  const handleDragStart = useCallback(() => { isDraggingRef.current = true; }, []);
+  const handleDragStop = useCallback(() => {
+    isDraggingRef.current = false;
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_trainings', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+  const handleResizeStop = useCallback(() => {
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_trainings', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
     }
   }, []);
 
@@ -2413,12 +3335,16 @@ function TrainingsSection({
         cols={{ lg: 12, md: 10, sm: 6 }}
         rowHeight={70}
         onLayoutChange={handleLayoutChange}
+        onDragStart={handleDragStart}
+        onDragStop={handleDragStop}
+        onResizeStop={handleResizeStop}
         draggableHandle=".drag-handle"
         isResizable={true}
         isDraggable={true}
         margin={[12, 12]}
         containerPadding={[0, 0]}
-        compactType={null}
+        compactType="vertical"
+        preventCollision={false}
       >
         <div key="training-total">
           <DraggableCard
@@ -2511,35 +3437,86 @@ function TrainingsSection({
 
 function MeasuresSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
   const { toast } = useToast();
-  const defaultLayout = [
-    { i: "measures-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-    { i: "measures-completed", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-    { i: "measures-progress", x: 6, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-  ];
+  const isInitialMountRef = useRef(true);
+  const isDraggingRef = useRef(false);
+  const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
+  const lastSavedLayoutRef = useRef<string>('');
+  const defaultLayout = {
+    lg: [
+      { i: "measures-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "measures-completed", x: 6, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "measures-progress", x: 0, y: 2, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    md: [
+      { i: "measures-total", x: 0, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+      { i: "measures-completed", x: 5, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+      { i: "measures-progress", x: 0, y: 2, w: 5, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    sm: [
+      { i: "measures-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "measures-completed", x: 0, y: 2, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "measures-progress", x: 0, y: 4, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
     try {
-      const saved = localStorage.getItem('hse_layout_measures');
+      const saved = localStorage.getItem('hse_layout_measures_v2');
       if (saved) return JSON.parse(saved);
     } catch (error) {
       console.error('Error loading measures layout:', error);
     }
-    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    return defaultLayout;
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
-    setLayouts(allLayouts);
+    if (isInitialMountRef.current) return;
+    if (isDraggingRef.current) {
+      pendingLayoutRef.current = allLayouts;
+      return;
+    }
+    const serialized = JSON.stringify(allLayouts);
+    if (serialized === lastSavedLayoutRef.current) return;
+    lastSavedLayoutRef.current = serialized;
     try {
-      localStorage.setItem('hse_layout_measures', JSON.stringify(allLayouts));
+      localStorage.setItem('hse_layout_measures_v2', serialized);
     } catch (error) {
       console.error('Error saving measures layout:', error);
     }
   }, []);
 
+  const handleDragStart = useCallback(() => { isDraggingRef.current = true; }, []);
+  const handleDragStop = useCallback(() => {
+    isDraggingRef.current = false;
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_measures_v2', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+  const handleResizeStop = useCallback(() => {
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_measures_v2', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+
   const resetLayout = useCallback(() => {
-    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    const defaultLayouts = defaultLayout;
     setLayouts(defaultLayouts);
-    localStorage.removeItem('hse_layout_measures');
+    localStorage.removeItem('hse_layout_measures_v2');
     toast({ title: "Layout Reset", description: "Measures layout has been reset to default" });
   }, [toast]);
 
@@ -2548,7 +3525,7 @@ function MeasuresSection({ stats, chartData }: { stats: ReportStats; chartData: 
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold mb-2">Measures</h2>
-          <p className="text-muted-foreground">Corrective and preventive actions. Drag cards to reposition, drag corners to resize.</p>
+          <p className="text-muted-foreground">Tracks corrective and preventive actions derived from risk assessments, audit findings, and incident investigations.</p>
         </div>
         <Button variant="outline" size="sm" onClick={resetLayout}>
           <RotateCcw className="w-4 h-4 mr-2" />
@@ -2563,12 +3540,16 @@ function MeasuresSection({ stats, chartData }: { stats: ReportStats; chartData: 
         cols={{ lg: 12, md: 10, sm: 6 }}
         rowHeight={70}
         onLayoutChange={handleLayoutChange}
+        onDragStart={handleDragStart}
+        onDragStop={handleDragStop}
+        onResizeStop={handleResizeStop}
         draggableHandle=".drag-handle"
         isResizable={true}
         isDraggable={true}
         margin={[12, 12]}
         containerPadding={[0, 0]}
-        compactType={null}
+        compactType="vertical"
+        preventCollision={false}
       >
         <div key="measures-total">
           <DraggableCard
@@ -2604,10 +3585,29 @@ function MeasuresSection({ stats, chartData }: { stats: ReportStats; chartData: 
 
 function TasksSection({ stats, chartData }: { stats: ReportStats; chartData: any[] }) {
   const { toast } = useToast();
-  const defaultLayout = [
-    { i: "tasks-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-    { i: "tasks-completed", x: 3, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-  ];
+  const isInitialMountRef = useRef(true);
+  const isDraggingRef = useRef(false);
+  const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
+  const lastSavedLayoutRef = useRef<string>('');
+  const defaultLayout = {
+    lg: [
+      { i: "tasks-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "tasks-completed", x: 6, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    md: [
+      { i: "tasks-total", x: 0, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+      { i: "tasks-completed", x: 5, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false },
+    ],
+    sm: [
+      { i: "tasks-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false },
+      { i: "tasks-completed", x: 0, y: 2, w: 6, h: 2, minW: 2, minH: 2, static: false },
+    ],
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
     try {
@@ -2616,20 +3616,50 @@ function TasksSection({ stats, chartData }: { stats: ReportStats; chartData: any
     } catch (error) {
       console.error('Error loading tasks layout:', error);
     }
-    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    return defaultLayout;
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
-    setLayouts(allLayouts);
+    if (isInitialMountRef.current) return;
+    if (isDraggingRef.current) {
+      pendingLayoutRef.current = allLayouts;
+      return;
+    }
+    const serialized = JSON.stringify(allLayouts);
+    if (serialized === lastSavedLayoutRef.current) return;
+    lastSavedLayoutRef.current = serialized;
     try {
-      localStorage.setItem('hse_layout_tasks', JSON.stringify(allLayouts));
+      localStorage.setItem('hse_layout_tasks', serialized);
     } catch (error) {
       console.error('Error saving tasks layout:', error);
     }
   }, []);
 
+  const handleDragStart = useCallback(() => { isDraggingRef.current = true; }, []);
+  const handleDragStop = useCallback(() => {
+    isDraggingRef.current = false;
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_tasks', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+  const handleResizeStop = useCallback(() => {
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_tasks', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+
   const resetLayout = useCallback(() => {
-    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    const defaultLayouts = defaultLayout;
     setLayouts(defaultLayouts);
     localStorage.removeItem('hse_layout_tasks');
     toast({ title: "Layout Reset", description: "Tasks layout has been reset to default" });
@@ -2655,12 +3685,16 @@ function TasksSection({ stats, chartData }: { stats: ReportStats; chartData: any
         cols={{ lg: 12, md: 10, sm: 6 }}
         rowHeight={70}
         onLayoutChange={handleLayoutChange}
+        onDragStart={handleDragStart}
+        onDragStop={handleDragStop}
+        onResizeStop={handleResizeStop}
         draggableHandle=".drag-handle"
         isResizable={true}
         isDraggable={true}
         margin={[12, 12]}
         containerPadding={[0, 0]}
-        compactType={null}
+        compactType="vertical"
+        preventCollision={false}
       >
         <div key="tasks-total">
           <DraggableCard
@@ -2687,9 +3721,20 @@ function TasksSection({ stats, chartData }: { stats: ReportStats; chartData: any
 
 function CheckupsSection({ stats }: { stats: ReportStats }) {
   const { toast } = useToast();
-  const defaultLayout = [
-    { i: "checkups-total", x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2, static: false },
-  ];
+  const isInitialMountRef = useRef(true);
+  const isDraggingRef = useRef(false);
+  const pendingLayoutRef = useRef<{ [key: string]: any[] } | null>(null);
+  const lastSavedLayoutRef = useRef<string>('');
+  const defaultLayout = {
+    lg: [{ i: "checkups-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false }],
+    md: [{ i: "checkups-total", x: 0, y: 0, w: 5, h: 2, minW: 2, minH: 2, static: false }],
+    sm: [{ i: "checkups-total", x: 0, y: 0, w: 6, h: 2, minW: 2, minH: 2, static: false }],
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => { isInitialMountRef.current = false; }, 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [layouts, setLayouts] = useState<{ [key: string]: any[] }>(() => {
     try {
@@ -2698,20 +3743,50 @@ function CheckupsSection({ stats }: { stats: ReportStats }) {
     } catch (error) {
       console.error('Error loading checkups layout:', error);
     }
-    return { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    return defaultLayout;
   });
 
   const handleLayoutChange = useCallback((currentLayout: any[], allLayouts: { [key: string]: any[] }) => {
-    setLayouts(allLayouts);
+    if (isInitialMountRef.current) return;
+    if (isDraggingRef.current) {
+      pendingLayoutRef.current = allLayouts;
+      return;
+    }
+    const serialized = JSON.stringify(allLayouts);
+    if (serialized === lastSavedLayoutRef.current) return;
+    lastSavedLayoutRef.current = serialized;
     try {
-      localStorage.setItem('hse_layout_checkups', JSON.stringify(allLayouts));
+      localStorage.setItem('hse_layout_checkups', serialized);
     } catch (error) {
       console.error('Error saving checkups layout:', error);
     }
   }, []);
 
+  const handleDragStart = useCallback(() => { isDraggingRef.current = true; }, []);
+  const handleDragStop = useCallback(() => {
+    isDraggingRef.current = false;
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_checkups', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+  const handleResizeStop = useCallback(() => {
+    if (pendingLayoutRef.current) {
+      const allLayouts = pendingLayoutRef.current;
+      const serialized = JSON.stringify(allLayouts);
+      lastSavedLayoutRef.current = serialized;
+      setLayouts(allLayouts);
+      try { localStorage.setItem('hse_layout_checkups', serialized); } catch (e) {}
+      pendingLayoutRef.current = null;
+    }
+  }, []);
+
   const resetLayout = useCallback(() => {
-    const defaultLayouts = { lg: defaultLayout, md: defaultLayout, sm: defaultLayout };
+    const defaultLayouts = defaultLayout;
     setLayouts(defaultLayouts);
     localStorage.removeItem('hse_layout_checkups');
     toast({ title: "Layout Reset", description: "Checkups layout has been reset to default" });
@@ -2722,7 +3797,7 @@ function CheckupsSection({ stats }: { stats: ReportStats }) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold mb-2">Health Check-ups</h2>
-          <p className="text-muted-foreground">Employee health monitoring. Drag cards to reposition, drag corners to resize.</p>
+          <p className="text-muted-foreground">Tracks G-Investigation health examinations (e.g., vision tests, hearing tests) for occupational medical care compliance.</p>
         </div>
         <Button variant="outline" size="sm" onClick={resetLayout}>
           <RotateCcw className="w-4 h-4 mr-2" />
@@ -2737,12 +3812,16 @@ function CheckupsSection({ stats }: { stats: ReportStats }) {
         cols={{ lg: 12, md: 10, sm: 6 }}
         rowHeight={70}
         onLayoutChange={handleLayoutChange}
+        onDragStart={handleDragStart}
+        onDragStop={handleDragStop}
+        onResizeStop={handleResizeStop}
         draggableHandle=".drag-handle"
         isResizable={true}
         isDraggable={true}
         margin={[12, 12]}
         containerPadding={[0, 0]}
-        compactType={null}
+        compactType="vertical"
+        preventCollision={false}
       >
         <div key="checkups-total">
           <DraggableCard

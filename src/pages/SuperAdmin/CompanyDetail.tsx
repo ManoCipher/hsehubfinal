@@ -65,36 +65,45 @@ import { Switch } from "@/components/ui/switch";
 const formatLogDescription = (log: any) => {
     const action = log.action_type || "";
     const details = log.details || {};
-    const target = log.target_name || log.target_type || "Unknown";
 
     switch (action) {
         case "create_employee":
-            return `Created employee ${target} (#${details.employee_number || "?"})`;
+            return details.employee_number ? `Employee #${details.employee_number}` : "New employee";
         case "update_employee":
-            return `Updated employee profile for ${target}`;
+            return "Profile updated";
         case "delete_user":
-            return `Deleted user account: ${target}`;
+            return "Account deleted";
         case "login":
-            return `User logged in`;
+            return details.ip || "User login";
         case "create_incident":
-            return `Reported new incident: ${target}`;
+            return details.severity ? `Severity: ${details.severity}` : "Incident reported";
         case "update_incident":
-            return `Updated incident: ${target}`;
+            return details.status ? `Status: ${details.status}` : "Incident updated";
         case "delete_incident":
-            return `Deleted incident record`;
+            return "Incident removed";
+        case "assign_task":
+            return details.assigned_to ? `Assigned to ${details.assigned_to}` : "Task created";
+        case "complete_task":
+            return "Task completed";
+        case "reopen_task":
+            return "Task reopened";
+        case "create_audit":
+            return details.iso_code || "Audit created";
+        case "delete_audit":
+            return "Audit removed";
         case "update_custom_reports":
-            return `Updated custom reports configuration (${details.count || 0} reports)`;
+            return `${details.count || 0} report${details.count !== 1 ? 's' : ''} configured`;
         case "block_company":
-            return `Blocked company access. Reason: ${details.reason || "Not specified"}`;
+            return `Blocked: ${details.reason || "No reason specified"}`;
         case "unblock_company":
-            return `Unblocked company access.`;
+            return "Company access restored";
         case "invoice_correction":
-            return `Correction: ${details.amount} (${details.reason})`;
+            return `${details.amount} (${details.reason})`;
         case "assign_addon":
-            return `Assigned module ${details.addon_name || ""} to company`;
+            return `Module: ${details.addon_name || "Unknown"}`;
         default:
             const humanAction = action.replace(/_/g, " ");
-            return `${humanAction.charAt(0).toUpperCase() + humanAction.slice(1)}: ${target}`;
+            return humanAction.charAt(0).toUpperCase() + humanAction.slice(1);
     }
 };
 
@@ -343,25 +352,35 @@ export default function CompanyDetail() {
     };
 
     const fetchAuditLogs = async () => {
-        // Build the query
+        // Build the query - show ALL company activities
+        // Only filter out true platform admin actions (by action type, not role)
         let query = supabase
             .from("audit_logs")
             .select("*")
             .eq("company_id", id)
-            .neq("actor_role", "super_admin") // Filter out super admin actions
-            .neq("actor_role", "system") // Filter out system actions (often super admin)
-            .not("action_type", "in", '("block_company","unblock_company","extend_trial","invoice_correction","assign_addon")') // Explicitly filter out SA actions
+            // Only exclude platform-specific admin actions, not based on who did them
+            .not("action_type", "in", '("block_company","unblock_company","extend_trial","invoice_correction","assign_addon","delete_user","activate_module")')
             .order("created_at", { ascending: false })
-            .limit(50); // Increased limit to 50 for better visibility
-
-
+            .limit(100);
 
         const { data, error } = await query;
 
-        console.log("Raw Audit Logs for debugging:", data); // Debug log
+        console.log("📤 Company Activity Logs:", data?.length || 0);
+        
+        // Debug: Log action types breakdown
+        if (data && data.length > 0) {
+            const actionTypes = data.reduce((acc: any, log: any) => {
+                acc[log.action_type] = (acc[log.action_type] || 0) + 1;
+                return acc;
+            }, {});
+            console.log("📊 Action Types:", actionTypes);
+            console.log("🎭 Roles:", [...new Set(data.map((l: any) => l.actor_role))]);
+        } else {
+            console.log("⚠️ No company activity logs found");
+        }
 
         if (error) {
-            console.error("Audit logs logs error:", error);
+            console.error("❌ Audit logs error:", error);
             setAuditLogs([]);
             return;
         }
