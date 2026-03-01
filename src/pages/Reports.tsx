@@ -3,6 +3,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useNavigate } from "react-router-dom";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
   Download,
   Filter,
@@ -569,10 +571,278 @@ export default function Reports() {
       });
       return;
     }
-    
+
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pageW = doc.internal.pageSize.getWidth();
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
+    const timeStr = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+
+    // ── Header bar ──────────────────────────────────────────────
+    doc.setFillColor(79, 70, 229); // indigo-600
+    doc.rect(0, 0, pageW, 22, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("HSE Hub – Safety Management", 14, 10);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Generated: ${dateStr} at ${timeStr}`, 14, 17);
+    doc.text(`Date range: ${dateRange.replace(/-/g, " ")}`, pageW - 14, 17, { align: "right" });
+
+    // ── Report title ────────────────────────────────────────────
+    doc.setTextColor(30, 30, 30);
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text(reportName || "Safety Report", 14, 34);
+
+    // Section label
+    const sectionLabel = navSections.find(s => s.id === activeSection)?.name || activeSection;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Section: ${sectionLabel}`, 14, 41);
+
+    let cursorY = 50;
+
+    // ── Helper: section heading ──────────────────────────────────
+    const sectionHeading = (title: string) => {
+      doc.setFillColor(243, 244, 246);
+      doc.rect(14, cursorY, pageW - 28, 8, "F");
+      doc.setTextColor(55, 65, 81);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text(title, 16, cursorY + 5.5);
+      cursorY += 12;
+    };
+
+    // ── Build content based on active section ───────────────────
+    if (activeSection === "overview") {
+      sectionHeading("Key Performance Indicators");
+      autoTable(doc, {
+        startY: cursorY,
+        head: [["Metric", "Value"]],
+        body: [
+          ["Total Employees", stats.totalEmployees],
+          ["Risk Assessments (GBU)", stats.totalRiskAssessments],
+          ["Safety Audits", stats.totalAudits],
+          ["Completed Audits", stats.completedAudits],
+          ["Incidents", stats.totalIncidents],
+          ["Open Incidents", stats.openIncidents],
+          ["Closed Incidents", stats.totalIncidents - stats.openIncidents],
+          ["Training Courses", stats.totalTrainings],
+          ["Training Compliance", `${stats.trainingCompliance}%`],
+          ["Measures", stats.totalMeasures],
+          ["Completed Measures", stats.completedMeasures],
+          ["In-Progress Measures", stats.totalMeasures - stats.completedMeasures],
+          ["Tasks", stats.totalTasks],
+          ["Completed Tasks", stats.completedTasks],
+          ["Health Check-ups", stats.totalCheckUps],
+        ],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 90 }, 1: { halign: "right" } },
+        margin: { left: 14, right: 14 },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+
+      if (chartData && chartData.length > 0) {
+        sectionHeading("Monthly Incident Trend");
+        autoTable(doc, {
+          startY: cursorY,
+          head: [["Month", "Incidents"]],
+          body: chartData.map((d: any) => [d.month || d.name || "", d.incidents ?? d.value ?? 0]),
+          styles: { fontSize: 9, cellPadding: 3 },
+          headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: "bold" },
+          alternateRowStyles: { fillColor: [249, 250, 251] },
+          margin: { left: 14, right: 14 },
+        });
+        cursorY = (doc as any).lastAutoTable.finalY + 10;
+      }
+    } else if (activeSection === "risk-assessments") {
+      sectionHeading("Risk Assessments Summary");
+      autoTable(doc, {
+        startY: cursorY,
+        head: [["Metric", "Value"]],
+        body: [
+          ["Total GBU Risk Assessments", stats.totalRiskAssessments],
+        ],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [234, 88, 12], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 90 }, 1: { halign: "right" } },
+        margin: { left: 14, right: 14 },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+    } else if (activeSection === "audits") {
+      sectionHeading("Safety Audits Summary");
+      const pending = stats.totalAudits - stats.completedAudits;
+      const completionRate = stats.totalAudits > 0 ? Math.round((stats.completedAudits / stats.totalAudits) * 100) : 0;
+      autoTable(doc, {
+        startY: cursorY,
+        head: [["Metric", "Value"]],
+        body: [
+          ["Total Audits", stats.totalAudits],
+          ["Completed", stats.completedAudits],
+          ["Pending / In Progress", pending],
+          ["Completion Rate", `${completionRate}%`],
+        ],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 90 }, 1: { halign: "right" } },
+        margin: { left: 14, right: 14 },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+    } else if (activeSection === "incidents") {
+      sectionHeading("Incidents Summary");
+      autoTable(doc, {
+        startY: cursorY,
+        head: [["Metric", "Value"]],
+        body: [
+          ["Total Incidents", stats.totalIncidents],
+          ["Open / Under Investigation", stats.openIncidents],
+          ["Closed / Resolved", stats.totalIncidents - stats.openIncidents],
+        ],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [220, 38, 38], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 90 }, 1: { halign: "right" } },
+        margin: { left: 14, right: 14 },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+    } else if (activeSection === "trainings") {
+      sectionHeading("Training Summary");
+      autoTable(doc, {
+        startY: cursorY,
+        head: [["Metric", "Value"]],
+        body: [
+          ["Total Training Courses", stats.totalTrainings],
+          ["Overall Compliance Rate", `${stats.trainingCompliance}%`],
+        ],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 90 }, 1: { halign: "right" } },
+        margin: { left: 14, right: 14 },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+
+      if (trainingMatrix && trainingMatrix.length > 0) {
+        sectionHeading("Employee Training Matrix");
+        autoTable(doc, {
+          startY: cursorY,
+          head: [["Employee", "Required", "Completed", "Expired", "Compliance", "Status"]],
+          body: trainingMatrix.map(item => [
+            item.employee_name,
+            item.total_required,
+            item.completed,
+            item.expired,
+            `${item.compliance_rate}%`,
+            item.compliance_rate >= 80 ? "Compliant" : item.compliance_rate >= 50 ? "Needs Attention" : "Non-Compliant",
+          ]),
+          styles: { fontSize: 8, cellPadding: 2.5 },
+          headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: "bold" },
+          alternateRowStyles: { fillColor: [249, 250, 251] },
+          columnStyles: {
+            0: { cellWidth: 50 },
+            5: { fontStyle: "bold" },
+          },
+          didDrawCell: (data: any) => {
+            if (data.column.index === 5 && data.section === "body") {
+              const val = String(data.cell.raw);
+              if (val === "Compliant") doc.setTextColor(22, 163, 74);
+              else if (val === "Needs Attention") doc.setTextColor(202, 138, 4);
+              else doc.setTextColor(220, 38, 38);
+            }
+          },
+          margin: { left: 14, right: 14 },
+        });
+        cursorY = (doc as any).lastAutoTable.finalY + 10;
+      }
+    } else if (activeSection === "measures") {
+      sectionHeading("Measures Summary");
+      const completionRate = stats.totalMeasures > 0 ? Math.round((stats.completedMeasures / stats.totalMeasures) * 100) : 0;
+      autoTable(doc, {
+        startY: cursorY,
+        head: [["Metric", "Value"]],
+        body: [
+          ["Total Measures", stats.totalMeasures],
+          ["Completed", stats.completedMeasures],
+          ["In Progress", stats.totalMeasures - stats.completedMeasures],
+          ["Completion Rate", `${completionRate}%`],
+        ],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [124, 58, 237], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 90 }, 1: { halign: "right" } },
+        margin: { left: 14, right: 14 },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+    } else if (activeSection === "tasks") {
+      sectionHeading("Tasks Summary");
+      const completionRate = stats.totalTasks > 0 ? Math.round((stats.completedTasks / stats.totalTasks) * 100) : 0;
+      autoTable(doc, {
+        startY: cursorY,
+        head: [["Metric", "Value"]],
+        body: [
+          ["Total Tasks", stats.totalTasks],
+          ["Completed", stats.completedTasks],
+          ["Pending", stats.totalTasks - stats.completedTasks],
+          ["Completion Rate", `${completionRate}%`],
+        ],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [99, 102, 241], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 90 }, 1: { halign: "right" } },
+        margin: { left: 14, right: 14 },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+    } else if (activeSection === "checkups") {
+      sectionHeading("Health Check-ups Summary");
+      autoTable(doc, {
+        startY: cursorY,
+        head: [["Metric", "Value"]],
+        body: [
+          ["Total Health Check-ups", stats.totalCheckUps],
+        ],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [13, 148, 136], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: { 0: { fontStyle: "bold", cellWidth: 90 }, 1: { halign: "right" } },
+        margin: { left: 14, right: 14 },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // ── Footer on every page ─────────────────────────────────────
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Page ${i} of ${totalPages}`, pageW / 2, doc.internal.pageSize.getHeight() - 6, { align: "center" });
+      doc.text("HSE Hub – Confidential", 14, doc.internal.pageSize.getHeight() - 6);
+      doc.text(dateStr, pageW - 14, doc.internal.pageSize.getHeight() - 6, { align: "right" });
+    }
+
+    // ── Save ─────────────────────────────────────────────────────
+    const fileName = `${(reportName || "safety-report").toLowerCase().replace(/\s+/g, "-")}_${sectionLabel.toLowerCase().replace(/\s+/g, "-")}_${now.toISOString().slice(0, 10)}.pdf`;
+    doc.save(fileName);
+
     toast({
-      title: "Coming Soon",
-      description: "PDF export functionality will be available soon",
+      title: "✅ PDF Exported",
+      description: `"${reportName}" has been downloaded as ${fileName}`,
+    });
+
+    logAction({
+      action: "export_report",
+      targetType: "report",
+      targetId: activeSection,
+      targetName: reportName,
+      details: { section: activeSection, dateRange, fileName },
     });
   };
 
@@ -1230,10 +1500,99 @@ export default function Reports() {
       });
       return;
     }
-    
+
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pageW = doc.internal.pageSize.getWidth();
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
+    const timeStr = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+
+    // Header bar
+    doc.setFillColor(79, 70, 229);
+    doc.rect(0, 0, pageW, 22, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("HSE Hub – Safety Management", 14, 10);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Generated: ${dateStr} at ${timeStr}`, 14, 17);
+
+    // Report Title
+    doc.setTextColor(30, 30, 30);
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text(config.title, 14, 34);
+
+    // Metadata
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Metric: ${config.metric}  |  Chart: ${config.chartType}  |  Group by: ${config.groupBy}`, 14, 41);
+
+    let cursorY = 52;
+
+    // Config summary table
+    autoTable(doc, {
+      startY: cursorY,
+      head: [["Property", "Value"]],
+      body: [
+        ["Metric", config.metric],
+        ["Chart Type", config.chartType],
+        ["Group By", config.groupBy],
+        ["Date Range", config.dateRange?.type?.replace(/_/g, " ") || "All time"],
+        ...(config.incidentType ? [["Incident Type", config.incidentType]] : []),
+        ...(config.auditTemplate ? [["Audit Template", config.auditTemplate]] : []),
+      ],
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: "bold" },
+      alternateRowStyles: { fillColor: [249, 250, 251] },
+      columnStyles: { 0: { fontStyle: "bold", cellWidth: 70 } },
+      margin: { left: 14, right: 14 },
+    });
+    cursorY = (doc as any).lastAutoTable.finalY + 10;
+
+    // Data table if available
+    if (config.data && config.data.length > 0) {
+      doc.setFillColor(243, 244, 246);
+      doc.rect(14, cursorY, pageW - 28, 8, "F");
+      doc.setTextColor(55, 65, 81);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text("Report Data", 16, cursorY + 5.5);
+      cursorY += 12;
+
+      const dataKeys = Object.keys(config.data[0]);
+      autoTable(doc, {
+        startY: cursorY,
+        head: [dataKeys.map(k => k.charAt(0).toUpperCase() + k.slice(1))],
+        body: config.data.map(row => dataKeys.map(k => String(row[k] ?? ""))),
+        styles: { fontSize: 8, cellPadding: 2.5 },
+        headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        margin: { left: 14, right: 14 },
+      });
+      cursorY = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Footer
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Page ${i} of ${totalPages}`, pageW / 2, doc.internal.pageSize.getHeight() - 6, { align: "center" });
+      doc.text("HSE Hub – Confidential", 14, doc.internal.pageSize.getHeight() - 6);
+      doc.text(dateStr, pageW - 14, doc.internal.pageSize.getHeight() - 6, { align: "right" });
+    }
+
+    const fileName = `${config.title.toLowerCase().replace(/\s+/g, "-")}_${now.toISOString().slice(0, 10)}.pdf`;
+    doc.save(fileName);
+
     toast({
-      title: "Exporting Report",
-      description: `Exporting "${config.title}"...`,
+      title: "✅ Report Exported",
+      description: `"${config.title}" downloaded as ${fileName}`,
     });
   };
 
