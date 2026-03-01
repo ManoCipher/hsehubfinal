@@ -699,6 +699,7 @@ export default function Employees() {
 
       toast.error(`${errorMessage}${errorDetails}`);
     } finally {
+      setIsDeleting(false);
     }
   };
 
