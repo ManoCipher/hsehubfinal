@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { STRIPE_PAYMENT_LINKS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -1086,18 +1087,19 @@ export default function Invoices() {
     }
   }, [toast]);
 
-  const openCheckout = useCallback(async (tier: string) => {
+  const openCheckout = useCallback((tier: string, isYearly = false) => {
     setBillingLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("stripe-checkout", {
-        body: {
-          tier,
-          success_url: `${window.location.origin}/invoices?checkout=success`,
-          cancel_url: `${window.location.origin}/invoices?checkout=cancelled`,
-        },
-      });
-      if (error || !data?.url) throw new Error(error?.message ?? "Failed to start checkout");
-      window.location.href = data.url;
+      if (!companyId) throw new Error("No company ID found");
+      
+      const planLinks = STRIPE_PAYMENT_LINKS[tier as keyof typeof STRIPE_PAYMENT_LINKS];
+      if (!planLinks) throw new Error(`Invalid plan tier: ${tier}`);
+      
+      const paymentLink = isYearly ? planLinks.yearly : planLinks.monthly;
+      const urlWithRef = new URL(paymentLink);
+      urlWithRef.searchParams.set("client_reference_id", companyId);
+
+      window.location.href = urlWithRef.toString();
     } catch (err: unknown) {
       toast({
         title: "Checkout unavailable",
@@ -1106,7 +1108,7 @@ export default function Invoices() {
       });
       setBillingLoading(false);
     }
-  }, [toast]);
+  }, [toast, companyId]);
 
   const stats = useMemo(() => {
     const paid = invoices.filter((i) => i.status === "paid");
