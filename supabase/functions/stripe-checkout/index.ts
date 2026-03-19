@@ -7,15 +7,20 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Map plan names to Stripe Price IDs – set these in your Stripe dashboard and
-// store the IDs in Supabase secrets (STRIPE_PRICE_BASIC, _STANDARD, _PREMIUM).
-function getPriceId(tier: string): string {
-  const map: Record<string, string> = {
-    basic: Deno.env.get("STRIPE_PRICE_BASIC") ?? "",
-    standard: Deno.env.get("STRIPE_PRICE_STANDARD") ?? "",
-    premium: Deno.env.get("STRIPE_PRICE_PREMIUM") ?? "",
-  };
-  return map[tier] ?? "";
+function normalizeInterval(interval: string | null | undefined): "monthly" | "yearly" {
+  return interval === "yearly" || interval === "year" ? "yearly" : "monthly";
+}
+
+function getPriceId(tier: string, interval: "monthly" | "yearly"): string {
+  const upperTier = tier.toUpperCase();
+  const intervalSuffix = interval === "yearly" ? "YEARLY" : "MONTHLY";
+
+  const intervalSpecific = Deno.env.get(`STRIPE_PRICE_${upperTier}_${intervalSuffix}`) ?? "";
+  const legacy = Deno.env.get(`STRIPE_PRICE_${upperTier}`) ?? "";
+
+  if (intervalSpecific) return intervalSpecific;
+  if (interval === "monthly" && legacy) return legacy;
+  return "";
 }
 
 serve(async (req) => {
@@ -44,14 +49,20 @@ serve(async (req) => {
     // 2. Parse body
     const body = await req.json().catch(() => ({}));
     const tier: string = body.tier ?? "standard";
+    const interval = normalizeInterval(body.interval ?? "monthly");
     const siteUrl: string = Deno.env.get("SITE_URL") ?? "";
     const successUrl: string = body.success_url ?? `${siteUrl}/invoices?checkout=success`;
     const cancelUrl: string = body.cancel_url ?? `${siteUrl}/invoices?checkout=cancelled`;
 
-    const priceId = getPriceId(tier);
+    const priceId = getPriceId(tier, interval);
     if (!priceId) {
       return new Response(
-        JSON.stringify({ error: `No Stripe price configured for plan: ${tier}. Add STRIPE_PRICE_${tier.toUpperCase()} secret.` }),
+        JSON.stringify({
+          error:
+            interval === "yearly"
+              ? `No Stripe yearly price configured for plan: ${tier}. Add STRIPE_PRICE_${tier.toUpperCase()}_YEARLY secret.`
+              : `No Stripe monthly price configured for plan: ${tier}. Add STRIPE_PRICE_${tier.toUpperCase()}_MONTHLY (or legacy STRIPE_PRICE_${tier.toUpperCase()}) secret.`,
+        }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -106,9 +117,10 @@ serve(async (req) => {
       metadata: {
         company_id: companyId,
         plan: tier,
+        interval,
       },
       subscription_data: {
-        metadata: { company_id: companyId, plan: tier },
+        metadata: { company_id: companyId, plan: tier, interval },
       },
       allow_promotion_codes: true,
       billing_address_collection: "auto",

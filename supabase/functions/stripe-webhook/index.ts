@@ -8,15 +8,315 @@ import Stripe from "https://esm.sh/stripe@14.5.0?target=deno";
 
 declare const Deno: any;
 
+type PlanTier = "basic" | "standard" | "premium";
+type BillingInterval = "month" | "year";
+
+const PAYMENT_LINK_URLS: Record<PlanTier, { monthly: string; yearly: string }> = {
+  basic: {
+    monthly: Deno.env.get("STRIPE_PAYMENT_LINK_BASIC_MONTHLY_URL") ?? "https://buy.stripe.com/cNi4gy9vEenj9jxgWNeME03",
+    yearly: Deno.env.get("STRIPE_PAYMENT_LINK_BASIC_YEARLY_URL") ?? "https://buy.stripe.com/28E14m6jsdjf2V9fSJeME04",
+  },
+  standard: {
+    monthly: Deno.env.get("STRIPE_PAYMENT_LINK_STANDARD_MONTHLY_URL") ?? "https://buy.stripe.com/00w00idLU0wt53hdKBeME05",
+    yearly: Deno.env.get("STRIPE_PAYMENT_LINK_STANDARD_YEARLY_URL") ?? "https://buy.stripe.com/14A14m37g2EBeDRdKBeME06",
+  },
+  premium: {
+    monthly: Deno.env.get("STRIPE_PAYMENT_LINK_PREMIUM_MONTHLY_URL") ?? "https://buy.stripe.com/9B628q6js2EB9jxaypeME07",
+    yearly: Deno.env.get("STRIPE_PAYMENT_LINK_PREMIUM_YEARLY_URL") ?? "https://buy.stripe.com/cNibJ00Z81AxgLZ0XPeME08",
+  },
+};
+
+const SUBSCRIPTION_STATUS_MAP: Record<string, "active" | "trial" | "inactive" | "cancelled"> = {
+  active: "active",
+  trialing: "trial",
+  past_due: "inactive",
+  canceled: "cancelled",
+  unpaid: "inactive",
+  incomplete: "inactive",
+  incomplete_expired: "inactive",
+  paused: "inactive",
+};
+
+const VALID_TIERS = new Set<PlanTier>(["basic", "standard", "premium"]);
+
+let cachedPricePlanMap: Record<string, { tier: PlanTier; interval: BillingInterval }> = {};
+let cachedAmountPlanMap: Record<string, PlanTier> = {};
+let cachedPricePlanMapAt = 0;
+
+function toStringOrNull(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (value === null || value === undefined) return null;
+  return String(value);
+}
+
+function normalizeUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, "");
+  } catch {
+    return url.replace(/\/+$/, "");
+  }
+}
+
+function normalizeInterval(interval: string | null | undefined): BillingInterval | null {
+  if (!interval) return null;
+  if (interval === "month" || interval === "monthly") return "month";
+  if (interval === "year" || interval === "yearly") return "year";
+  return null;
+}
+
+function parseTier(value: unknown): PlanTier | null {
+  if (typeof value !== "string") return null;
+  if (VALID_TIERS.has(value as PlanTier)) return value as PlanTier;
+  return null;
+}
+
+function resolvePlanFromMetadata(metadata: Record<string, unknown> | null | undefined) {
+  if (!metadata) return { tier: null as PlanTier | null, interval: null as BillingInterval | null };
+  return {
+    tier: parseTier((metadata.plan as string) ?? (metadata.subscription_tier as string)),
+    interval: normalizeInterval(
+      (metadata.interval as string) ??
+        (metadata.billing_interval as string) ??
+        (metadata.subscription_interval as string)
+    ),
+  };
+}
+
+function resolvePlanFromPaymentLinkUrl(url: string | null | undefined) {
+  const normalized = normalizeUrl(url);
+  if (!normalized) return { tier: null as PlanTier | null, interval: null as BillingInterval | null };
+
+  for (const [tier, links] of Object.entries(PAYMENT_LINK_URLS) as Array<[
+    PlanTier,
+    { monthly: string; yearly: string }
+  ]>) {
+    if (normalizeUrl(links.monthly) === normalized) {
+      return { tier, interval: "month" as BillingInterval };
+    }
+    if (normalizeUrl(links.yearly) === normalized) {
+      return { tier, interval: "year" as BillingInterval };
+    }
+  }
+
+  return { tier: null as PlanTier | null, interval: null as BillingInterval | null };
+}
+
+async function getPricePlanMap(supabase: any, forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && now - cachedPricePlanMapAt < 5 * 60 * 1000 && Object.keys(cachedPricePlanMap).length > 0) {
+    return cachedPricePlanMap;
+  }
+
+  const { data, error } = await supabase
+    .from("subscription_packages")
+    .select("tier, price_monthly, price_yearly, stripe_price_id_monthly, stripe_price_id_yearly")
+    .eq("is_active", true);
+
+  if (error) {
+    console.error("Failed to load subscription package price map:", error);
+    return cachedPricePlanMap;
+  }
+
+  const map: Record<string, { tier: PlanTier; interval: BillingInterval }> = {};
+  const amountMap: Record<string, PlanTier> = {};
+  for (const row of data ?? []) {
+    const tier = parseTier(row.tier);
+    if (!tier) continue;
+    if (row.stripe_price_id_monthly) {
+      map[row.stripe_price_id_monthly] = { tier, interval: "month" };
+    }
+    if (row.stripe_price_id_yearly) {
+      map[row.stripe_price_id_yearly] = { tier, interval: "year" };
+    }
+
+    const monthlyAmount = Number(row.price_monthly);
+    if (Number.isFinite(monthlyAmount) && monthlyAmount > 0) {
+      amountMap[`month:${Math.round(monthlyAmount * 100)}`] = tier;
+    }
+
+    const yearlyAmount = Number(row.price_yearly);
+    if (Number.isFinite(yearlyAmount) && yearlyAmount > 0) {
+      amountMap[`year:${Math.round(yearlyAmount * 100)}`] = tier;
+    }
+  }
+
+  cachedPricePlanMap = map;
+  cachedAmountPlanMap = amountMap;
+  cachedPricePlanMapAt = now;
+  return map;
+}
+
+async function resolvePlanFromAmount(
+  unitAmount: number | null | undefined,
+  interval: BillingInterval | null,
+  supabase: any
+) {
+  if (!interval || unitAmount === null || unitAmount === undefined) {
+    return null;
+  }
+
+  await getPricePlanMap(supabase);
+  const key = `${interval}:${Math.round(Number(unitAmount))}`;
+  return cachedAmountPlanMap[key] ?? null;
+}
+
+async function resolvePlanFromPriceId(priceId: string | null | undefined, supabase: any) {
+  if (!priceId) return { tier: null as PlanTier | null, interval: null as BillingInterval | null };
+  const map = await getPricePlanMap(supabase);
+  const match = map[priceId];
+  if (match) return match;
+
+  const refreshed = await getPricePlanMap(supabase, true);
+  return refreshed[priceId] ?? { tier: null as PlanTier | null, interval: null as BillingInterval | null };
+}
+
+async function resolvePlanFromSubscription(sub: Stripe.Subscription, supabase: any) {
+  const metadataPlan = resolvePlanFromMetadata(sub.metadata as Record<string, unknown>);
+  const firstPrice = sub.items?.data?.[0]?.price;
+  const priceId = firstPrice?.id ?? null;
+  const mapped = await resolvePlanFromPriceId(priceId, supabase);
+  const intervalFromPrice = normalizeInterval(firstPrice?.recurring?.interval ?? null);
+  const amountTier = await resolvePlanFromAmount(firstPrice?.unit_amount ?? null, intervalFromPrice, supabase);
+
+  return {
+    tier: mapped.tier ?? metadataPlan.tier ?? amountTier,
+    interval: mapped.interval ?? metadataPlan.interval ?? intervalFromPrice,
+    priceId,
+  };
+}
+
+async function resolvePlanFromCheckoutSession(
+  session: Stripe.Checkout.Session,
+  stripe: Stripe,
+  supabase: any
+) {
+  const metadataPlan = resolvePlanFromMetadata(session.metadata as Record<string, unknown>);
+
+  let paymentLinkPlan = { tier: null as PlanTier | null, interval: null as BillingInterval | null };
+  if (session.payment_link) {
+    try {
+      const paymentLink = await stripe.paymentLinks.retrieve(toStringOrNull(session.payment_link)!);
+      paymentLinkPlan = resolvePlanFromPaymentLinkUrl(paymentLink?.url ?? null);
+    } catch (err) {
+      console.error("Failed retrieving payment link details:", err);
+    }
+  }
+
+  let priceId: string | null = null;
+  let intervalFromPrice: BillingInterval | null = null;
+  let priceUnitAmount: number | null = null;
+  try {
+    const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {
+      limit: 1,
+      expand: ["data.price"],
+    });
+    const first = lineItems.data?.[0];
+    priceId = first?.price?.id ?? null;
+    intervalFromPrice = normalizeInterval(first?.price?.recurring?.interval ?? null);
+    priceUnitAmount = first?.price?.unit_amount ?? null;
+  } catch (err) {
+    console.error("Failed retrieving checkout line items:", err);
+  }
+
+  const mapped = await resolvePlanFromPriceId(priceId, supabase);
+  const amountTier = await resolvePlanFromAmount(priceUnitAmount, intervalFromPrice, supabase);
+
+  return {
+    tier: mapped.tier ?? paymentLinkPlan.tier ?? metadataPlan.tier ?? amountTier,
+    interval: mapped.interval ?? paymentLinkPlan.interval ?? metadataPlan.interval ?? intervalFromPrice,
+    priceId,
+  };
+}
+
+async function findCompanyId(
+  supabase: any,
+  explicitCompanyId: string | null | undefined,
+  customerId: string | null | undefined
+) {
+  if (explicitCompanyId) return explicitCompanyId;
+  if (!customerId) return null;
+
+  const { data, error } = await supabase
+    .from("companies")
+    .select("id")
+    .eq("stripe_customer_id", customerId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Failed to find company by stripe_customer_id:", error);
+    return null;
+  }
+
+  return data?.id ?? null;
+}
+
+async function updateCompanySubscription(supabase: any, companyId: string, updates: Record<string, unknown>) {
+  const payload = {
+    ...updates,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase.from("companies").update(payload).eq("id", companyId);
+  if (!error) return;
+
+  const message = String(error?.message ?? "").toLowerCase();
+  const details = String(error?.details ?? "").toLowerCase();
+  const intervalColumnMissing =
+    payload.subscription_billing_interval !== undefined &&
+    (
+      error?.code === "PGRST204" ||
+      message.includes("subscription_billing_interval") ||
+      details.includes("subscription_billing_interval") ||
+      message.includes("column")
+    );
+
+  if (intervalColumnMissing) {
+    const fallbackPayload = { ...payload };
+    delete fallbackPayload.subscription_billing_interval;
+
+    const { error: fallbackError } = await supabase
+      .from("companies")
+      .update(fallbackPayload)
+      .eq("id", companyId);
+
+    if (!fallbackError) {
+      console.warn("companies.subscription_billing_interval is missing; update applied without interval.");
+      return;
+    }
+
+    throw fallbackError;
+  }
+
+  throw error;
+}
+
+function mapSubscriptionStatus(status: string, cancelAtPeriodEnd = false) {
+  if (cancelAtPeriodEnd) return "cancelled";
+  return SUBSCRIPTION_STATUS_MAP[status] ?? "inactive";
+}
+
 serve(async (req: Request) => {
   const signature = req.headers.get("stripe-signature") ?? "";
   const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET") ?? "";
 
+  if (!webhookSecret) {
+    console.error("STRIPE_WEBHOOK_SECRET is not configured");
+    return new Response("Webhook secret missing", { status: 500 });
+  }
+
+  if (!Deno.env.get("STRIPE_SECRET_KEY")) {
+    console.error("STRIPE_SECRET_KEY is not configured");
+    return new Response("Stripe secret missing", { status: 500 });
+  }
+
   let event: Stripe.Event;
+  let stripe: Stripe;
 
   try {
     const body = await req.text();
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
+    stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
       apiVersion: "2023-10-16",
       httpClient: Stripe.createFetchHttpClient(),
     });
@@ -33,83 +333,75 @@ serve(async (req: Request) => {
 
   try {
     switch (event.type) {
-      // ── Subscription activated / updated ───────────────────────────────────
       case "customer.subscription.created":
       case "customer.subscription.updated": {
         const sub = event.data.object as Stripe.Subscription;
-        // With Payment Links, metadata won't be on the subscription by default unless we copy it.
-        // If metadata.company_id exists (for legacy checkouts), we use it. 
-        // Otherwise, we match by stripe_customer_id which is set during checkout.session.completed.
-        let companyId = sub.metadata?.company_id;
-        
-        if (!companyId && sub.customer) {
-          const { data: c } = await supabase.from("companies").select("id").eq("stripe_customer_id", sub.customer as string).single();
-          if (c) companyId = c.id;
-        }
-        
+        const customerId = toStringOrNull(sub.customer);
+        const companyId = await findCompanyId(supabase, sub.metadata?.company_id ?? null, customerId);
         if (!companyId) break;
 
-        const plan = sub.metadata?.plan ?? "basic"; // We might need to map Stripe Price IDs to plans instead later if necessary
-        const statusMap: Record<string, string> = {
-          active: "active",
-          trialing: "trial",
-          past_due: "active",
-          canceled: "cancelled",
-          unpaid: "inactive",
-          incomplete: "inactive",
-          incomplete_expired: "inactive",
-          paused: "inactive",
-        };
+        const resolved = await resolvePlanFromSubscription(sub, supabase);
+        const status = mapSubscriptionStatus(sub.status, Boolean(sub.cancel_at_period_end));
 
-        await supabase.from("companies").update({
-          // Note: we only update tier if we are sure of the plan, but we can't be sure from static links easily unless we map prices. 
-          // We will map prices in the checkout.session.completed event instead.
-          subscription_status: statusMap[sub.status] ?? "active",
+        const updates: Record<string, unknown> = {
+          subscription_status: status,
           stripe_subscription_id: sub.id,
-          subscription_start_date: new Date(sub.start_date * 1000).toISOString(),
+          stripe_customer_id: customerId,
+          subscription_start_date: sub.current_period_start
+            ? new Date(sub.current_period_start * 1000).toISOString()
+            : sub.start_date
+              ? new Date(sub.start_date * 1000).toISOString()
+              : null,
           subscription_end_date: sub.current_period_end
             ? new Date(sub.current_period_end * 1000).toISOString()
             : null,
-        }).eq("id", companyId);
+        };
+
+        if (resolved.tier) updates.subscription_tier = resolved.tier;
+        if (resolved.interval) updates.subscription_billing_interval = resolved.interval;
+        if (status === "trial" && sub.trial_end) {
+          updates.trial_ends_at = new Date(sub.trial_end * 1000).toISOString();
+        } else if (status !== "trial") {
+          updates.trial_ends_at = null;
+        }
+
+        await updateCompanySubscription(supabase, companyId, updates);
         break;
       }
 
-      // ── Subscription cancelled ─────────────────────────────────────────────
       case "customer.subscription.deleted": {
         const sub = event.data.object as Stripe.Subscription;
-        let companyId = sub.metadata?.company_id;
-        if (!companyId && sub.customer) {
-          const { data: c } = await supabase.from("companies").select("id").eq("stripe_customer_id", sub.customer as string).single();
-          if (c) companyId = c.id;
-        }
+        const customerId = toStringOrNull(sub.customer);
+        const companyId = await findCompanyId(supabase, sub.metadata?.company_id ?? null, customerId);
         if (!companyId) break;
 
-        await supabase.from("companies").update({
+        await updateCompanySubscription(supabase, companyId, {
           subscription_status: "cancelled",
+          stripe_customer_id: customerId,
+          stripe_subscription_id: sub.id,
           subscription_end_date: sub.canceled_at
             ? new Date(sub.canceled_at * 1000).toISOString()
+            : sub.ended_at
+              ? new Date(sub.ended_at * 1000).toISOString()
+              : sub.current_period_end
+                ? new Date(sub.current_period_end * 1000).toISOString()
             : null,
-        }).eq("id", companyId);
+        });
         break;
       }
 
-      // ── Invoice paid ───────────────────────────────────────────────────────
       case "invoice.paid": {
         const inv = event.data.object as Stripe.Invoice;
-        let companyId = (inv.subscription_details?.metadata as Record<string, string>)?.company_id
-          ?? (inv.metadata as Record<string, string>)?.company_id;
-          
-        if (!companyId && inv.customer) {
-          const { data: c } = await supabase.from("companies").select("id").eq("stripe_customer_id", inv.customer as string).single();
-          if (c) companyId = c.id;
-        }
+        const customerId = toStringOrNull(inv.customer);
+        const explicitCompanyId =
+          (inv.subscription_details?.metadata as Record<string, string>)?.company_id ??
+          (inv.metadata as Record<string, string>)?.company_id ??
+          null;
+        const companyId = await findCompanyId(supabase, explicitCompanyId, customerId);
         if (!companyId) break;
 
-        const invoiceNumber =
-          inv.number ??
-          `INV-${new Date().getFullYear()}-${String(inv.created).slice(-5)}`;
+        const invoiceNumber = inv.number ?? `STRIPE-${inv.id}`;
 
-        // Upsert invoice record
         await supabase.from("invoices").upsert({
           company_id: companyId,
           invoice_number: invoiceNumber,
@@ -137,57 +429,155 @@ serve(async (req: Request) => {
             unit_price: (line.unit_amount_excluding_tax ?? line.amount ?? 0) / 100,
             total: (line.amount ?? 0) / 100,
           })),
-          metadata: { stripe_invoice_id: inv.id, stripe_hosted_url: inv.hosted_invoice_url ?? null },
+          metadata: {
+            stripe_invoice_id: inv.id,
+            stripe_hosted_url: inv.hosted_invoice_url ?? null,
+            stripe_subscription_id: toStringOrNull(inv.subscription),
+          },
         }, { onConflict: "invoice_number" });
+
+        const updates: Record<string, unknown> = {
+          subscription_status: "active",
+          trial_ends_at: null,
+        };
+
+        if (customerId) updates.stripe_customer_id = customerId;
+
+        const subscriptionId = toStringOrNull(inv.subscription);
+        if (subscriptionId) {
+          updates.stripe_subscription_id = subscriptionId;
+          try {
+            const sub = await stripe.subscriptions.retrieve(subscriptionId, { expand: ["items.data.price"] });
+            const resolved = await resolvePlanFromSubscription(sub as Stripe.Subscription, supabase);
+            if (resolved.tier) updates.subscription_tier = resolved.tier;
+            if (resolved.interval) updates.subscription_billing_interval = resolved.interval;
+            if (sub.current_period_start) {
+              updates.subscription_start_date = new Date(sub.current_period_start * 1000).toISOString();
+            }
+            if (sub.current_period_end) {
+              updates.subscription_end_date = new Date(sub.current_period_end * 1000).toISOString();
+            }
+          } catch (err) {
+            console.error("Failed to refresh subscription on invoice.paid:", err);
+          }
+        } else {
+          if (inv.period_start) {
+            updates.subscription_start_date = new Date(inv.period_start * 1000).toISOString();
+          }
+          if (inv.period_end) {
+            updates.subscription_end_date = new Date(inv.period_end * 1000).toISOString();
+          }
+        }
+
+        await updateCompanySubscription(supabase, companyId, updates);
         break;
       }
 
-      // ── Invoice payment failed ─────────────────────────────────────────────
       case "invoice.payment_failed": {
         const inv = event.data.object as Stripe.Invoice;
-        const invoiceNumber = inv.number;
-        if (!invoiceNumber) break;
+        const customerId = toStringOrNull(inv.customer);
+        const explicitCompanyId =
+          (inv.subscription_details?.metadata as Record<string, string>)?.company_id ??
+          (inv.metadata as Record<string, string>)?.company_id ??
+          null;
+        const companyId = await findCompanyId(supabase, explicitCompanyId, customerId);
 
-        await supabase.from("invoices")
+        if (inv.number) {
+          await supabase.from("invoices")
+            .update({ status: "overdue" })
+            .eq("invoice_number", inv.number);
+        }
+
+        await supabase
+          .from("invoices")
           .update({ status: "overdue" })
-          .eq("invoice_number", invoiceNumber);
+          .contains("metadata", { stripe_invoice_id: inv.id });
+
+        if (companyId) {
+          const updates: Record<string, unknown> = {
+            subscription_status: "inactive",
+          };
+          if (customerId) updates.stripe_customer_id = customerId;
+          if (inv.subscription) updates.stripe_subscription_id = toStringOrNull(inv.subscription);
+          await updateCompanySubscription(supabase, companyId, updates);
+        }
         break;
       }
 
-      // ── Checkout completed ─────────────────────────────────────────────────
       case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Session;
-        // With Payment Links, we use client_reference_id for the company ID
-        const companyId = session.client_reference_id || session.metadata?.company_id;
-        
-        // Find plan from line items if metadata is missing (common for Payment Links)
-        let plan = session.metadata?.plan;
-        
-        if (!plan) {
-          // Attempt to map the price from the session to a plan if Deno env variables are available,
-          // though since we don't fetch the line items here, we can infer it or we fallback to basic.
-          // To be perfectly accurate we'd fetch the line items, but let's do a basic mapping for now.
-          // Wait, Stripe checkout.session.completed includes `payment_link`, we could map it, but the safest 
-          // way is to rely on subscription webhook updates for plan changes if we map the tier there.
-          plan = "standard"; // Default fallback
-        }
-
+        const session = event.data.object as Stripe.Checkout.Session;
+        const customerId = toStringOrNull(session.customer);
+        const explicitCompanyId =
+          toStringOrNull(session.client_reference_id) ??
+          (session.metadata?.company_id as string | null) ??
+          null;
+        const companyId = await findCompanyId(supabase, explicitCompanyId, customerId);
         if (!companyId) break;
 
-        const updatePayload: any = {
-          subscription_status: "active",
-        };
-        if (plan) {
-          updatePayload.subscription_tier = plan;
-        }
-        if (session.customer) {
-          updatePayload.stripe_customer_id = session.customer;
-        }
-        if (session.subscription) {
-          updatePayload.stripe_subscription_id = session.subscription;
+        const resolvedFromSession = await resolvePlanFromCheckoutSession(session, stripe, supabase);
+        let tier = resolvedFromSession.tier;
+        let interval = resolvedFromSession.interval;
+
+        let subscription: Stripe.Subscription | null = null;
+        const subscriptionId = toStringOrNull(session.subscription);
+        if (subscriptionId) {
+          try {
+            subscription = await stripe.subscriptions.retrieve(subscriptionId, { expand: ["items.data.price"] });
+            const resolvedFromSubscription = await resolvePlanFromSubscription(subscription, supabase);
+            tier = resolvedFromSubscription.tier ?? tier;
+            interval = resolvedFromSubscription.interval ?? interval;
+          } catch (err) {
+            console.error("Failed retrieving subscription from checkout.session.completed:", err);
+          }
         }
 
-        await supabase.from("companies").update(updatePayload).eq("id", companyId);
+        const updates: Record<string, unknown> = {
+          subscription_status: "active",
+          trial_ends_at: null,
+        };
+
+        if (tier) updates.subscription_tier = tier;
+        if (interval) updates.subscription_billing_interval = interval;
+        if (customerId) updates.stripe_customer_id = customerId;
+        if (subscriptionId) updates.stripe_subscription_id = subscriptionId;
+
+        if (subscription?.current_period_start) {
+          updates.subscription_start_date = new Date(subscription.current_period_start * 1000).toISOString();
+        } else if (subscription?.start_date) {
+          updates.subscription_start_date = new Date(subscription.start_date * 1000).toISOString();
+        }
+
+        if (subscription?.current_period_end) {
+          updates.subscription_end_date = new Date(subscription.current_period_end * 1000).toISOString();
+        }
+
+        await updateCompanySubscription(supabase, companyId, updates);
+        break;
+      }
+
+      case "checkout.session.async_payment_failed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const customerId = toStringOrNull(session.customer);
+        const explicitCompanyId =
+          toStringOrNull(session.client_reference_id) ??
+          (session.metadata?.company_id as string | null) ??
+          null;
+        const companyId = await findCompanyId(supabase, explicitCompanyId, customerId);
+        if (!companyId) break;
+
+        const updates: Record<string, unknown> = {
+          subscription_status: "inactive",
+        };
+        if (customerId) updates.stripe_customer_id = customerId;
+        if (session.subscription) updates.stripe_subscription_id = toStringOrNull(session.subscription);
+
+        await updateCompanySubscription(supabase, companyId, updates);
+        break;
+      }
+
+      case "checkout.session.expired": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        console.log("Checkout session expired:", session.id);
         break;
       }
 

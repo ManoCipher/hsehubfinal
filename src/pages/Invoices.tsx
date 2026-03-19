@@ -113,9 +113,24 @@ export interface CompanyBillingInfo {
   subscription_start_date: string | null;
   subscription_end_date: string | null;
   trial_ends_at: string | null;
+  subscription_billing_interval: "month" | "year" | null;
   billing_email: string | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
+}
+
+type PlanTier = "basic" | "standard" | "premium";
+type BillingInterval = "monthly" | "yearly";
+
+interface PendingStripeCheckout {
+  companyId: string;
+  tier: PlanTier;
+  interval: BillingInterval;
+  startedAt: string;
+  previousTier: PlanTier | null;
+  previousStatus: CompanyBillingInfo["subscription_status"] | null;
+  previousSubscriptionId: string | null;
+  previousEndDate: string | null;
 }
 
 type SortField = "invoice_number" | "created_at" | "due_date" | "total" | "status";
@@ -125,9 +140,9 @@ type SortDir = "asc" | "desc";
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 const PLAN_PRICES: Record<string, number> = {
-  basic: 99,
-  standard: 199,
-  premium: 299,
+  basic: 149,
+  standard: 249,
+  premium: 349,
 };
 
 const PLAN_LABELS: Record<string, string> = {
@@ -141,6 +156,9 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   USD: "$",
   GBP: "£",
 };
+
+const STRIPE_CHECKOUT_PENDING_KEY = "stripe_checkout_pending";
+const CHECKOUT_PENDING_TIMEOUT_MS = 45 * 60 * 1000;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper utils
@@ -157,6 +175,32 @@ function fmtDate(dateStr: string | null | undefined, fallback = "—") {
   } catch {
     return fallback;
   }
+}
+
+function billingIntervalLabel(interval: "month" | "year" | null | undefined) {
+  return interval === "year" ? "Yearly" : "Monthly";
+}
+
+function readPendingCheckout(): PendingStripeCheckout | null {
+  try {
+    const raw = localStorage.getItem(STRIPE_CHECKOUT_PENDING_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PendingStripeCheckout;
+    if (!parsed.companyId || !parsed.tier || !parsed.interval || !parsed.startedAt) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writePendingCheckout(payload: PendingStripeCheckout) {
+  localStorage.setItem(STRIPE_CHECKOUT_PENDING_KEY, JSON.stringify(payload));
+}
+
+function clearPendingCheckout() {
+  localStorage.removeItem(STRIPE_CHECKOUT_PENDING_KEY);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -344,7 +388,7 @@ function SubscriptionCard({
 }: {
   company: CompanyBillingInfo;
   onManageBilling: () => void;
-  onUpgrade: (tier: string) => void;
+  onUpgrade: (tier: PlanTier, interval: BillingInterval) => void;
   billingLoading: boolean;
 }) {
   const tier = company.subscription_tier ?? "basic";
@@ -352,6 +396,10 @@ function SubscriptionCard({
   const price = PLAN_PRICES[tier] ?? 0;
   const isTrialing = status === "trial";
   const isCancelled = status === "cancelled";
+  const isInactive = status === "inactive";
+  const [selectedInterval, setSelectedInterval] = useState<BillingInterval>(
+    company.subscription_billing_interval === "year" ? "yearly" : "monthly"
+  );
 
   const trialEnd = company.trial_ends_at ? new Date(company.trial_ends_at) : null;
   const daysUntilTrialEnd = trialEnd
@@ -420,8 +468,10 @@ function SubscriptionCard({
       </CardHeader>
       <CardContent className="pt-0 space-y-3">
         <div className="flex items-end gap-1">
-          <span className="text-3xl font-bold">${price}</span>
-          <span className="text-sm text-muted-foreground mb-1">/month</span>
+          <span className="text-3xl font-bold">€{price}</span>
+          <span className="text-sm text-muted-foreground mb-1">
+            /{company.subscription_billing_interval === "year" ? "year" : "month"}
+          </span>
         </div>
         <Separator className="opacity-50" />
         <div className="space-y-1.5 text-xs text-muted-foreground">
@@ -429,6 +479,14 @@ function SubscriptionCard({
             <div className="flex justify-between">
               <span>Started</span>
               <span className="font-medium text-foreground">{fmtDate(company.subscription_start_date)}</span>
+            </div>
+          )}
+          {company.subscription_billing_interval && (
+            <div className="flex justify-between">
+              <span>Billing cycle</span>
+              <span className="font-medium text-foreground">
+                {billingIntervalLabel(company.subscription_billing_interval)}
+              </span>
             </div>
           )}
           {company.subscription_end_date && !isCancelled && (
@@ -458,18 +516,49 @@ function SubscriptionCard({
             </div>
           )}
         </div>
-        {(isTrialing || isCancelled) && (
-          <Button
-            size="sm"
-            className="w-full mt-1"
-            onClick={() => onUpgrade(tier === "basic" ? "standard" : "premium")}
-            disabled={billingLoading}
-          >
-            {billingLoading ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 mr-1.5" />}
-            Upgrade Plan
-          </Button>
+        {(isTrialing || isCancelled || isInactive) && (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                size="sm"
+                variant={selectedInterval === "monthly" ? "default" : "outline"}
+                onClick={() => setSelectedInterval("monthly")}
+                disabled={billingLoading}
+              >
+                Monthly
+              </Button>
+              <Button
+                size="sm"
+                variant={selectedInterval === "yearly" ? "default" : "outline"}
+                onClick={() => setSelectedInterval("yearly")}
+                disabled={billingLoading}
+              >
+                Yearly
+              </Button>
+            </div>
+
+            <div className="grid gap-2">
+              {(["basic", "standard", "premium"] as const).map((targetTier) => (
+                <Button
+                  key={targetTier}
+                  size="sm"
+                  variant={targetTier === tier ? "default" : "outline"}
+                  className="w-full"
+                  onClick={() => onUpgrade(targetTier, selectedInterval)}
+                  disabled={billingLoading}
+                >
+                  {billingLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <Zap className="w-3.5 h-3.5 mr-1.5" />
+                  )}
+                  {`Choose ${PLAN_LABELS[targetTier]} (${selectedInterval === "yearly" ? "Yearly" : "Monthly"})`}
+                </Button>
+              ))}
+            </div>
+          </div>
         )}
-        {!isTrialing && !isCancelled && (
+        {!isTrialing && !isCancelled && !isInactive && (
           <Button
             size="sm"
             variant="outline"
@@ -1012,7 +1101,7 @@ export default function Invoices() {
       setError(null);
 
       try {
-        const [invoicesRes, companyRes] = await Promise.all([
+        const [invoicesRes, companyResWithInterval] = await Promise.all([
           supabase
             .from("invoices")
             .select("*")
@@ -1021,11 +1110,42 @@ export default function Invoices() {
           supabase
             .from("companies")
             .select(
-              "id, name, email, subscription_tier, subscription_status, subscription_start_date, subscription_end_date, trial_ends_at, billing_email, stripe_customer_id, stripe_subscription_id"
+              "id, name, email, subscription_tier, subscription_status, subscription_start_date, subscription_end_date, trial_ends_at, subscription_billing_interval, billing_email, stripe_customer_id, stripe_subscription_id"
             )
             .eq("id", companyId)
             .single(),
         ]);
+
+        let companyRes = companyResWithInterval;
+
+        if (companyResWithInterval.error) {
+          const msg = String(companyResWithInterval.error.message ?? "").toLowerCase();
+          const details = String(companyResWithInterval.error.details ?? "").toLowerCase();
+          const intervalColumnMissing =
+            companyResWithInterval.error.code === "PGRST204" ||
+            msg.includes("subscription_billing_interval") ||
+            details.includes("subscription_billing_interval");
+
+          if (intervalColumnMissing) {
+            const fallbackCompanyRes = await supabase
+              .from("companies")
+              .select(
+                "id, name, email, subscription_tier, subscription_status, subscription_start_date, subscription_end_date, trial_ends_at, billing_email, stripe_customer_id, stripe_subscription_id"
+              )
+              .eq("id", companyId)
+              .single();
+
+            companyRes = {
+              ...fallbackCompanyRes,
+              data: fallbackCompanyRes.data
+                ? {
+                    ...fallbackCompanyRes.data,
+                    subscription_billing_interval: null,
+                  }
+                : fallbackCompanyRes.data,
+            } as typeof companyResWithInterval;
+          }
+        }
 
         if (invoicesRes.error) throw invoicesRes.error;
         if (companyRes.error) throw companyRes.error;
@@ -1057,16 +1177,56 @@ export default function Invoices() {
   // Handle Stripe checkout return
   useEffect(() => {
     const checkoutStatus = searchParams.get("checkout");
+    if (!checkoutStatus) return;
+
     if (checkoutStatus === "success") {
+      clearPendingCheckout();
       toast({ title: "Subscription activated!", description: "Your plan has been updated. Refreshing billing data…" });
       fetchData(true);
       setSearchParams({}, { replace: true });
-    } else if (checkoutStatus === "cancelled") {
+    } else if (checkoutStatus === "cancelled" || checkoutStatus === "canceled" || checkoutStatus === "failed") {
+      clearPendingCheckout();
       toast({ title: "Checkout cancelled", description: "No changes were made.", variant: "destructive" });
       setSearchParams({}, { replace: true });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchData, searchParams, setSearchParams, toast]);
+
+  useEffect(() => {
+    if (!companyId || !company) return;
+
+    const pending = readPendingCheckout();
+    if (!pending || pending.companyId !== companyId) return;
+
+    const startedAtMs = new Date(pending.startedAt).getTime();
+    const hasTimedOut = Number.isFinite(startedAtMs)
+      ? Date.now() - startedAtMs > CHECKOUT_PENDING_TIMEOUT_MS
+      : false;
+
+    const subscriptionChanged =
+      company.subscription_tier !== pending.previousTier ||
+      company.subscription_status !== pending.previousStatus ||
+      company.stripe_subscription_id !== pending.previousSubscriptionId ||
+      company.subscription_end_date !== pending.previousEndDate;
+
+    if (company.subscription_status === "active" && subscriptionChanged) {
+      clearPendingCheckout();
+      toast({
+        title: "Payment successful",
+        description: `${PLAN_LABELS[company.subscription_tier]} ${pending.interval === "yearly" ? "yearly" : "monthly"} plan activated.`,
+      });
+      fetchData(true);
+      return;
+    }
+
+    if (hasTimedOut && !subscriptionChanged) {
+      clearPendingCheckout();
+      toast({
+        title: "Payment not completed",
+        description: "No successful Stripe payment was detected. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [company, companyId, fetchData, toast]);
 
   // ── Stripe helpers ──────────────────────────────────────────────────────────
   const openBillingPortal = useCallback(async () => {
@@ -1087,7 +1247,7 @@ export default function Invoices() {
     }
   }, [toast]);
 
-  const openCheckout = useCallback((tier: string, isYearly = false) => {
+  const openCheckout = useCallback((tier: PlanTier, interval: BillingInterval = "monthly") => {
     setBillingLoading(true);
     try {
       if (!companyId) throw new Error("No company ID found");
@@ -1095,9 +1255,25 @@ export default function Invoices() {
       const planLinks = STRIPE_PAYMENT_LINKS[tier as keyof typeof STRIPE_PAYMENT_LINKS];
       if (!planLinks) throw new Error(`Invalid plan tier: ${tier}`);
       
-      const paymentLink = isYearly ? planLinks.yearly : planLinks.monthly;
+      const paymentLink = interval === "yearly" ? planLinks.yearly : planLinks.monthly;
       const urlWithRef = new URL(paymentLink);
       urlWithRef.searchParams.set("client_reference_id", companyId);
+
+      const billingEmail = company?.billing_email ?? company?.email;
+      if (billingEmail) {
+        urlWithRef.searchParams.set("prefilled_email", billingEmail);
+      }
+
+      writePendingCheckout({
+        companyId,
+        tier,
+        interval,
+        startedAt: new Date().toISOString(),
+        previousTier: company?.subscription_tier ?? null,
+        previousStatus: company?.subscription_status ?? null,
+        previousSubscriptionId: company?.stripe_subscription_id ?? null,
+        previousEndDate: company?.subscription_end_date ?? null,
+      });
 
       window.location.href = urlWithRef.toString();
     } catch (err: unknown) {
@@ -1108,7 +1284,7 @@ export default function Invoices() {
       });
       setBillingLoading(false);
     }
-  }, [toast, companyId]);
+  }, [company, companyId, toast]);
 
   const stats = useMemo(() => {
     const paid = invoices.filter((i) => i.status === "paid");
@@ -1312,7 +1488,7 @@ export default function Invoices() {
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   {company?.subscription_tier
-                    ? `${PLAN_LABELS[company.subscription_tier]} plan`
+                    ? `${PLAN_LABELS[company.subscription_tier]} ${billingIntervalLabel(company.subscription_billing_interval).toLowerCase()} plan`
                     : "Monthly subscription"}
                 </p>
               </CardContent>
