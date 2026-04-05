@@ -51,7 +51,7 @@ const Index = () => {
       icon: FileCheck,
       title: "Sicherheitsaudits",
       description:
-        "Sicherheitsaudits planen, durchführen und nachverfolgen.",
+        "Sicherheitsaudits planen, durchführen und nachverfolgen - mit detaillierter Dokumentation für maximale Transparenz und Compliance.",
       color: "from-blue-500 to-blue-600",
       hoverColor: "hover:border-blue-500",
     },
@@ -73,9 +73,9 @@ const Index = () => {
     },
     {
       icon: Shield,
-      title: "Multi-Tenant Security",
+      title: "Vorfall- und Gefahrenmeldung",
       description:
-        "Enterprise-grade security with complete data isolation between companies using RLS.",
+        "Melden Sie Vorfälle und Gefahren direkt im System und sorgen Sie für schnelle Reaktionen, transparente Dokumentation und lückenlose Nachverfolgung.",
       color: "from-green-500 to-green-600",
       hoverColor: "hover:border-green-500",
     },
@@ -84,23 +84,23 @@ const Index = () => {
   const benefits = [
     {
       icon: Zap,
-      title: "Instant Setup",
-      desc: "Get started in minutes, not weeks",
+      title: "Schneller Einstieg",
+      desc: "In wenigen Minuten startklar, ohne lange Implementierungsprozesse",
     },
     {
       icon: Lock,
-      title: "Bank-Level Security",
-      desc: "AES-256 encryption & SOC 2 compliant",
+      title: "Maximale Sicherheit",
+      desc: "Ihre Daten sind geschützt nach höchsten Sicherheitsstandards",
     },
     {
       icon: Globe,
-      title: "Cloud-Based Access",
-      desc: "Access anywhere, anytime, any device",
+      title: "Zugriff von überall",
+      desc: "Arbeiten Sie flexibel, egal ob Büro, Baustelle oder unterwegs",
     },
     {
       icon: Headphones,
-      title: "24/7 Support",
-      desc: "Expert support when you need it",
+      title: "Rundum-Support",
+      desc: "Unser Team unterstützt Sie jederzeit bei Fragen und Problemen",
     },
   ];
 
