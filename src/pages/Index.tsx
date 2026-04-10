@@ -128,7 +128,7 @@ const Index = () => {
     },
   ];
 
-  const pricingPlans = [
+  const pricing = [
     {
       name: "Package S",
       subtitle: "HSE Basic - The digital entry point",
