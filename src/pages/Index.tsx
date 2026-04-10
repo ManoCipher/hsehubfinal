@@ -736,7 +736,7 @@ const Index = () => {
             </Card>
             <div className="text-center mt-6">
               <p className="text-sm text-gray-600">
-                No credit card required • Cancel anytime • 24/7 support
+                Keine Kreditkarte erforderlich • 14-Tage testen • Jederzeit kündbar
               </p>
             </div>
           </div>
@@ -786,15 +786,15 @@ const Index = () => {
               <div className="flex flex-wrap items-center justify-center gap-8 pt-8 text-white/90">
                 <div className="flex items-center gap-2">
                   <Check className="h-5 w-5" />
-                  <span>7-day free trial</span>
+                  <span>14-Tage testen</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-5 w-5" />
-                  <span>No credit card needed</span>
+                  <span>Keine Kreditkarte erforderlich/span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-5 w-5" />
-                  <span>Cancel anytime</span>
+                  <span>Jederzeit kündbar</span>
                 </div>
               </div>
             </div>
