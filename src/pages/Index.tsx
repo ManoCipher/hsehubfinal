@@ -441,14 +441,14 @@ const Index = () => {
         <div className="text-center mb-16 space-y-4">
           <Badge className="bg-green-100 text-green-700 border-green-200">
             <Award className="h-3 w-3 mr-1" />
-            Customer Success Stories
+            Erfolgsgeschichten unserer Kunden
           </Badge>
           <h2 className="text-4xl lg:text-5xl font-bold">
-            Loved by Safety Professionals Worldwide
+            Geschätzt von HSE-Profis deutschlandweit
           </h2>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            See how organizations transformed their HSE operations with
-            SafetyHub
+            Erfahren Sie, wie Unternehmen ihr HSE-Management mit unserer Plattform
+            nachhaltig verbessert und effizienter gestaltet haben.
           </p>
         </div>
 
