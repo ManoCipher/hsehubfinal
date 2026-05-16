@@ -24,6 +24,7 @@ import {
   Database,
   Check,
 } from "lucide-react";
+import PublicLayout from "@/components/PublicLayout";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -205,72 +206,7 @@ const Index = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
-      {/* Navigation Header */}
-      <nav className="border-b bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-green-600 rounded-xl blur opacity-25"></div>
-                <img
-                  src="/logo.png"
-                  alt="SafetyHub Logo"
-                  className="h-12 w-12 relative z-10"
-                />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
-                  SafetyHub
-                </h1>
-                <p className="text-xs text-gray-600">HSE Management Platform</p>
-              </div>
-            </div>
-            <div className="hidden md:flex items-center gap-8 text-sm font-medium">
-              <a
-                href="#features"
-                className="text-gray-700 hover:text-blue-600 transition-colors"
-              >
-                Funktionen
-              </a>
-              <a
-                href="#benefits"
-                className="text-gray-700 hover:text-blue-600 transition-colors"
-              >
-                Vorteile
-              </a>
-              <a
-                href="#testimonials"
-                className="text-gray-700 hover:text-blue-600 transition-colors"
-              >
-                Bewertungen
-              </a>
-              <a
-                href="#pricing"
-                className="text-gray-700 hover:text-blue-600 transition-colors"
-              >
-                Preise
-              </a>
-            </div>
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                onClick={() => navigate("/auth")}
-                className="hidden sm:flex"
-              >
-                Login
-              </Button>
-              <Button
-                onClick={() => navigate("/auth")}
-                className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transition-all"
-              >
-                Jetzt Starten <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </nav>
-
+    <PublicLayout>
       {/* Hero Section */}
       <section className="container mx-auto px-4 py-20 lg:py-32">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
@@ -771,70 +707,7 @@ const Index = () => {
           </CardContent>
         </Card>
       </section>
-
-      {/* Footer */}
-      <footer className="border-t bg-gray-50 py-16">
-        <div className="container mx-auto px-4">
-          <div className="mb-12">
-            <div>
-              <div className="flex items-center gap-3 mb-4">
-                <img
-                  src="/logo.png"
-                  
-                  className="h-12 w-12"
-                />
-                <div>
-                  <p className="text-lg font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
-                    SafetyHub
-                  </p>
-                  <p className="text-xs text-gray-600">
-                    HSE Management Platform
-                  </p>
-                </div>
-              </div>
-              <p className="text-gray-600 mb-4 leading-relaxed">
-                Wir unterstützen Unternehmen dabei, durch innovative Lösungen für das 
-                Arbeitsschutzmanagement sicherere Arbeitsplätze zu schaffen.
-              </p>
-              <div className="flex gap-3">
-                <Badge
-                  variant="outline"
-                  className="cursor-pointer hover:bg-blue-50"
-                >
-                  SOC 2 Certified
-                </Badge>
-                <Badge
-                  variant="outline"
-                  className="cursor-pointer hover:bg-green-50"
-                >
-                  ISO 27001
-                </Badge>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4 pt-8 border-t">
-            <p className="text-sm text-gray-600">
-              © 2025 SafetyHub. All rights reserved.
-            </p>
-            <div className="flex gap-6 text-sm text-gray-600">
-              <a
-                href="/impressum"
-                className="hover:text-blue-600 transition-colors"
-              >
-                Impressum
-              </a>
-              <a
-                href="/datenschutz"
-                className="hover:text-blue-600 transition-colors"
-              >
-                Datenschutzerklärung
-              </a>
-            </div>
-          </div>
-        </div>
-      </footer>
-    </div>
+    </PublicLayout>
   );
 };
 
