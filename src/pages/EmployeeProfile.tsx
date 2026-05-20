@@ -3152,7 +3152,7 @@ export default function EmployeeProfile() {
                                       {customFieldEditValue ? (
                                         format(new Date(customFieldEditValue), "PPP")
                                       ) : (
-                                        <span>Pick a date</span>
+                                        <span>{t("common.pickDate")}</span>
                                       )}
                                     </Button>
                                   </PopoverTrigger>
@@ -4599,7 +4599,7 @@ export default function EmployeeProfile() {
                             {checkupFormData.appointment_date ? (
                               format(new Date(checkupFormData.appointment_date), "PPP")
                             ) : (
-                              <span>Pick a date</span>
+                              <span>{t("common.pickDate")}</span>
                             )}
                           </Button>
                         </PopoverTrigger>
@@ -4631,7 +4631,7 @@ export default function EmployeeProfile() {
                             {checkupFormData.due_date ? (
                               format(new Date(checkupFormData.due_date), "PPP")
                             ) : (
-                              <span>Pick a date</span>
+                              <span>{t("common.pickDate")}</span>
                             )}
                           </Button>
                         </PopoverTrigger>
