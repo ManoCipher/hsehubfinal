@@ -77,6 +77,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -171,7 +172,9 @@ export default function Settings() {
   const [auditCategories, setAuditCategories] = useState<any[]>([]);
   const [measureBuildingBlocks, setMeasureBuildingBlocks] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
-  const [profileFields, setProfileFields] = useState<any[]>([]);
+  const [profileFieldTemplates, setProfileFieldTemplates] = useState<any[]>([]);
+  const [selectedProfileTemplateId, setSelectedProfileTemplateId] = useState<string | null>(null);
+  const [templateFields, setTemplateFields] = useState<any[]>([]);
 
   // Approval Process State
   const [approvalWorkflows, setApprovalWorkflows] = useState<any[]>([]);
@@ -222,8 +225,16 @@ export default function Settings() {
     fieldName: "",
     fieldLabel: "",
     fieldType: "text",
+    isRequired: false,
+    extractedFromResume: false,
   });
   const [isSubmittingProfileField, setIsSubmittingProfileField] = useState(false);
+  const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<any>(null);
+  const [templateForm, setTemplateForm] = useState({
+    name: "",
+  });
+  const [templateToDelete, setTemplateToDelete] = useState<any>(null);
 
   // API Integration State
   const [apiToken, setApiToken] = useState<string | null>(null);
@@ -346,7 +357,7 @@ export default function Settings() {
       fetchTeamMembers();
       fetchCustomRoles();
       fetchApprovalWorkflows();
-      fetchProfileFields();
+      fetchProfileFieldTemplates();
       fetchISOStandards();
       fetchGInvestigations();
       fetchAllIsoCriteria();
@@ -658,20 +669,53 @@ export default function Settings() {
     }
   };
 
-  const fetchProfileFields = async () => {
+  const fetchProfileFieldTemplates = async () => {
     if (!companyId) return;
 
     try {
       const { data, error } = await supabase
-        .from("profile_fields")
+        .from("profile_field_templates")
         .select("*")
         .eq("company_id", companyId)
         .order("display_order", { ascending: true });
 
       if (error) throw error;
-      setProfileFields(data || []);
+      const templates = data || [];
+      setProfileFieldTemplates(templates);
+
+      const activeTemplateId =
+        templates.find((template) => template.id === selectedProfileTemplateId)
+          ?.id ||
+        templates[0]?.id ||
+        null;
+
+      setSelectedProfileTemplateId(activeTemplateId);
+
+      if (activeTemplateId) {
+        await fetchTemplateFields(activeTemplateId);
+      } else {
+        setTemplateFields([]);
+      }
     } catch (err: unknown) {
-      console.error("Error fetching profile fields:", err);
+      console.error("Error fetching profile field templates:", err);
+    }
+  };
+
+  const fetchTemplateFields = async (templateId: string) => {
+    if (!companyId || !templateId) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("profile_fields")
+        .select("*")
+        .eq("template_id", templateId)
+        .order("display_order", { ascending: true });
+
+      if (error) throw error;
+      setTemplateFields(data || []);
+    } catch (err: unknown) {
+      console.error("Error fetching template fields:", err);
+      setTemplateFields([]);
     }
   };
 
@@ -2685,6 +2729,108 @@ export default function Settings() {
   };
 
   // Profile Fields Management Functions
+  const openTemplateDialog = (template?: any) => {
+    if (template) {
+      setEditingTemplate(template);
+      setTemplateForm({ name: template.name || "" });
+    } else {
+      setEditingTemplate(null);
+      setTemplateForm({ name: "" });
+    }
+    setIsTemplateDialogOpen(true);
+  };
+
+  const closeTemplateDialog = () => {
+    setIsTemplateDialogOpen(false);
+    setEditingTemplate(null);
+    setTemplateForm({ name: "" });
+  };
+
+  const saveTemplate = async () => {
+    if (!companyId) return;
+
+    if (!templateForm.name.trim()) {
+      toast({
+        title: t("settings.error"),
+        description: "Template name is required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      if (editingTemplate) {
+        const { error } = await supabase
+          .from("profile_field_templates")
+          .update({
+            name: templateForm.name.trim(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", editingTemplate.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("profile_field_templates")
+          .insert([
+            {
+              company_id: companyId,
+              name: templateForm.name.trim(),
+              display_order: profileFieldTemplates.length,
+            },
+          ]);
+
+        if (error) throw error;
+      }
+
+      toast({
+        title: t("settings.success"),
+        description: editingTemplate
+          ? "Template updated successfully"
+          : "Template added successfully",
+      });
+
+      await fetchProfileFieldTemplates();
+      closeTemplateDialog();
+    } catch (err: any) {
+      toast({
+        title: t("settings.error"),
+        description: err.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const deleteTemplate = async (templateId: string) => {
+    if (!companyId) return;
+
+    try {
+      const { error } = await supabase
+        .from("profile_field_templates")
+        .delete()
+        .eq("id", templateId);
+
+      if (error) throw error;
+
+      toast({
+        title: t("settings.success"),
+        description: "Template deleted successfully",
+      });
+
+      if (selectedProfileTemplateId === templateId) {
+        setSelectedProfileTemplateId(null);
+      }
+
+      await fetchProfileFieldTemplates();
+    } catch (err: any) {
+      toast({
+        title: t("settings.error"),
+        description: err.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const openProfileFieldDialog = (field?: any) => {
     if (field) {
       setEditingProfileField(field);
@@ -2692,6 +2838,8 @@ export default function Settings() {
         fieldName: field.field_name,
         fieldLabel: field.field_label,
         fieldType: field.field_type,
+        isRequired: !!field.is_required,
+        extractedFromResume: !!field.extracted_from_resume,
       });
     } else {
       setEditingProfileField(null);
@@ -2699,6 +2847,8 @@ export default function Settings() {
         fieldName: "",
         fieldLabel: "",
         fieldType: "text",
+        isRequired: false,
+        extractedFromResume: false,
       });
     }
     setIsProfileFieldDialogOpen(true);
@@ -2711,11 +2861,22 @@ export default function Settings() {
       fieldName: "",
       fieldLabel: "",
       fieldType: "text",
+      isRequired: false,
+      extractedFromResume: false,
     });
   };
 
   const saveProfileField = async () => {
     if (!companyId) return;
+
+    if (!selectedProfileTemplateId) {
+      toast({
+        title: t("settings.error"),
+        description: "Please select a template first",
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (!profileFieldForm.fieldName || !profileFieldForm.fieldLabel) {
       toast({
@@ -2736,6 +2897,8 @@ export default function Settings() {
           .update({
             field_label: profileFieldForm.fieldLabel,
             field_type: profileFieldForm.fieldType,
+            is_required: profileFieldForm.isRequired,
+            extracted_from_resume: profileFieldForm.extractedFromResume,
             updated_at: new Date().toISOString(),
           })
           .eq("id", editingProfileField.id);
@@ -2753,10 +2916,13 @@ export default function Settings() {
           .insert([
             {
               company_id: companyId,
+              template_id: selectedProfileTemplateId,
               field_name: profileFieldForm.fieldName,
               field_label: profileFieldForm.fieldLabel,
               field_type: profileFieldForm.fieldType,
-              display_order: profileFields.length,
+              is_required: profileFieldForm.isRequired,
+              extracted_from_resume: profileFieldForm.extractedFromResume,
+              display_order: templateFields.length,
             },
           ]);
 
@@ -2768,7 +2934,7 @@ export default function Settings() {
         });
       }
 
-      await fetchProfileFields();
+      await fetchTemplateFields(selectedProfileTemplateId);
       closeProfileFieldDialog();
     } catch (err: any) {
       toast({
@@ -2797,7 +2963,9 @@ export default function Settings() {
         description: "Profile field deleted successfully",
       });
 
-      await fetchProfileFields();
+      if (selectedProfileTemplateId) {
+        await fetchTemplateFields(selectedProfileTemplateId);
+      }
     } catch (err: any) {
       toast({
         title: t("settings.error"),
@@ -3022,6 +3190,10 @@ export default function Settings() {
         </AlertDialogContent>
       </AlertDialog>
     </Card>
+  );
+
+  const activeProfileTemplate = profileFieldTemplates.find(
+    (template) => template.id === selectedProfileTemplateId
   );
 
   if (loading || loadingData) {
@@ -4091,93 +4263,210 @@ export default function Settings() {
               <TabsContent value="profile-fields">
                 <Card>
                   <CardHeader>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
                       <div>
                         <CardTitle>{t("settings.profileFieldsTitle")}</CardTitle>
                         <CardDescription>
                           {t("settings.profileFieldsSubtitle")}
                         </CardDescription>
                       </div>
-                      <Button onClick={() => openProfileFieldDialog()}>
-                        <Plus className="w-4 h-4 mr-2" />
-                        {t("settings.addProfileField")}
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" onClick={() => openTemplateDialog()}>
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Template
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => openProfileFieldDialog()}
+                          disabled={!selectedProfileTemplateId}
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          {t("settings.addProfileField")}
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="rounded-md border">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>{t("settings.fieldLabel")}</TableHead>
-                            <TableHead>{t("settings.fieldName")}</TableHead>
-                            <TableHead>{t("settings.fieldType")}</TableHead>
-                            <TableHead className="text-right">{t("common.actions")}</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {profileFields.length === 0 ? (
-                            <TableRow>
-                              <TableCell
-                                colSpan={4}
-                                className="text-center py-8 text-muted-foreground"
-                              >
-                                {t("settings.noProfileFields")}
-                              </TableCell>
-                            </TableRow>
-                          ) : (
-                            profileFields.map((field) => (
-                              <TableRow key={field.id}>
-                                <TableCell className="font-medium">
-                                  {field.field_label}
-                                  {field.is_required && (
-                                    <span className="text-destructive ml-1">*</span>
-                                  )}
-                                </TableCell>
-                                <TableCell className="font-mono text-sm text-muted-foreground">
-                                  {field.field_name}
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant="secondary">
-                                    {field.field_type}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  <div className="flex justify-end gap-2">
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() => openProfileFieldDialog(field)}
-                                        >
-                                          <Pencil className="w-4 h-4" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Edit</TooltipContent>
-                                    </Tooltip>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() => deleteProfileField(field.id)}
-                                        >
-                                          <Trash2 className="w-4 h-4 text-destructive" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Delete</TooltipContent>
-                                    </Tooltip>
+                    <div className="grid grid-cols-1 xl:grid-cols-[260px_1fr] gap-6">
+                      <div className="rounded-lg border bg-muted/20 p-3">
+                        <div className="text-sm font-medium mb-3">Templates</div>
+                        {profileFieldTemplates.length === 0 ? (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <p className="font-medium mb-2">No templates yet</p>
+                            <p className="text-sm">Create a template to start adding fields.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {profileFieldTemplates.map((template) => {
+                              const isActive = template.id === selectedProfileTemplateId;
+                              return (
+                                <div
+                                  key={template.id}
+                                  className={`flex items-center justify-between rounded-md border px-3 py-2 cursor-pointer transition-colors ${
+                                    isActive
+                                      ? "bg-primary/10 border-primary"
+                                      : "bg-background hover:bg-muted/40"
+                                  }`}
+                                  onClick={() => {
+                                    setSelectedProfileTemplateId(template.id);
+                                    fetchTemplateFields(template.id);
+                                  }}
+                                >
+                                  <div className="min-w-0">
+                                    <div className="font-medium truncate">{template.name}</div>
                                   </div>
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        openTemplateDialog(template);
+                                      }}
+                                    >
+                                      <Pencil className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setTemplateToDelete(template);
+                                      }}
+                                    >
+                                      <Trash2 className="w-4 h-4 text-destructive" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="rounded-lg border">
+                        <div className="flex items-center justify-between border-b px-4 py-3">
+                          <div>
+                            <div className="font-medium">
+                              {activeProfileTemplate?.name || "Template fields"}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {activeProfileTemplate
+                                ? "Fields for the selected template"
+                                : "Select a template to begin"}
+                            </div>
+                          </div>
+                        </div>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>{t("settings.fieldLabel")}</TableHead>
+                              <TableHead>{t("settings.fieldName")}</TableHead>
+                              <TableHead>{t("settings.fieldType")}</TableHead>
+                              <TableHead className="text-right">{t("common.actions")}</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {templateFields.length === 0 ? (
+                              <TableRow>
+                                <TableCell
+                                  colSpan={4}
+                                  className="text-center py-8 text-muted-foreground"
+                                >
+                                  {selectedProfileTemplateId
+                                    ? t("settings.noProfileFields")
+                                    : "Select a template to view its fields"}
                                 </TableCell>
                               </TableRow>
-                            ))
-                          )}
-                        </TableBody>
-                      </Table>
+                            ) : (
+                              templateFields.map((field) => (
+                                <TableRow key={field.id}>
+                                  <TableCell className="font-medium">
+                                    {field.field_label}
+                                    {field.is_required && (
+                                      <span className="text-destructive ml-1">*</span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="font-mono text-sm text-muted-foreground">
+                                    {field.field_name}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="secondary">
+                                      {field.field_type}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex justify-end gap-2">
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => openProfileFieldDialog(field)}
+                                          >
+                                            <Pencil className="w-4 h-4" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Edit</TooltipContent>
+                                      </Tooltip>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => deleteProfileField(field.id)}
+                                          >
+                                            <Trash2 className="w-4 h-4 text-destructive" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Delete</TooltipContent>
+                                      </Tooltip>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* Add/Edit Template Dialog */}
+                <Dialog open={isTemplateDialogOpen} onOpenChange={setIsTemplateDialogOpen}>
+                  <DialogContent className="sm:max-w-[480px]">
+                    <DialogHeader>
+                      <DialogTitle>
+                        {editingTemplate ? "Edit Template" : "Add Template"}
+                      </DialogTitle>
+                      <DialogDescription>
+                        Create and manage profile field templates.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div>
+                        <Label htmlFor="template-name">Template name</Label>
+                        <Input
+                          id="template-name"
+                          placeholder="e.g. Driver Template"
+                          value={templateForm.name}
+                          onChange={(event) =>
+                            setTemplateForm({ name: event.target.value })
+                          }
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={closeTemplateDialog}>
+                        {t("common.cancel")}
+                      </Button>
+                      <Button onClick={saveTemplate}>
+                        {editingTemplate ? t("common.update") : t("common.create")}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
 
                 {/* Add/Edit Profile Field Dialog */}
                 <Dialog open={isProfileFieldDialogOpen} onOpenChange={setIsProfileFieldDialogOpen}>
@@ -4199,12 +4488,12 @@ export default function Settings() {
                         </Label>
                         <Input
                           id="profile-field-name"
-                          placeholder="z.B. education_level"
+                          placeholder="e.g. license_type"
                           value={profileFieldForm.fieldName}
-                          onChange={(e) =>
+                          onChange={(event) =>
                             setProfileFieldForm((prev) => ({
                               ...prev,
-                              fieldName: e.target.value,
+                              fieldName: event.target.value,
                             }))
                           }
                           disabled={!!editingProfileField}
@@ -4222,12 +4511,12 @@ export default function Settings() {
                         </Label>
                         <Input
                           id="profile-field-label"
-                          placeholder="z.B. Bildungsstand"
+                          placeholder="e.g. Driving license"
                           value={profileFieldForm.fieldLabel}
-                          onChange={(e) =>
+                          onChange={(event) =>
                             setProfileFieldForm((prev) => ({
                               ...prev,
-                              fieldLabel: e.target.value,
+                              fieldLabel: event.target.value,
                             }))
                           }
                         />
@@ -4253,6 +4542,32 @@ export default function Settings() {
                             <SelectItem value="boolean">{t("settings.fieldTypeBoolean")}</SelectItem>
                           </SelectContent>
                         </Select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="profile-field-required"
+                          checked={profileFieldForm.isRequired}
+                          onCheckedChange={(checked) =>
+                            setProfileFieldForm((prev) => ({
+                              ...prev,
+                              isRequired: Boolean(checked),
+                            }))
+                          }
+                        />
+                        <Label htmlFor="profile-field-required">Required field</Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="profile-field-extracted"
+                          checked={profileFieldForm.extractedFromResume}
+                          onCheckedChange={(checked) =>
+                            setProfileFieldForm((prev) => ({
+                              ...prev,
+                              extractedFromResume: Boolean(checked),
+                            }))
+                          }
+                        />
+                        <Label htmlFor="profile-field-extracted">Extract from resume</Label>
                       </div>
                     </div>
                     <DialogFooter>
@@ -4281,6 +4596,31 @@ export default function Settings() {
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
+
+                {/* Delete Template Confirmation */}
+                <AlertDialog open={!!templateToDelete} onOpenChange={() => setTemplateToDelete(null)}>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete template?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will remove the template and all of its fields.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => {
+                          if (templateToDelete) {
+                            deleteTemplate(templateToDelete.id);
+                          }
+                          setTemplateToDelete(null);
+                        }}
+                      >
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </TabsContent>
 
               {/* Tab 4: Catalogs & Content */}
