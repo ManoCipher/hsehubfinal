@@ -23,7 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 WorkNote.txt
-
 # Secrets and environments
 supabase/.env
 src/pages/PROMPT.md
+PROMPT.md
+

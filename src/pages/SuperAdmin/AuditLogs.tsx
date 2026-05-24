@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -54,6 +54,11 @@ interface AuditLog {
     };
 }
 
+interface CompanyOption {
+    id: string;
+    name: string;
+}
+
 export default function AuditLogs() {
     const { user, userRole, loading } = useAuth();
     const navigate = useNavigate();
@@ -65,6 +70,9 @@ export default function AuditLogs() {
     const [actionFilter, setActionFilter] = useState("all");
     const [targetFilter, setTargetFilter] = useState("all");
     const [dateRange, setDateRange] = useState("7days");
+    const [companyFilter, setCompanyFilter] = useState("all");
+    const [actorFilter, setActorFilter] = useState("");
+    const [companies, setCompanies] = useState<CompanyOption[]>([]);
 
     const [stats, setStats] = useState({
         totalLogs: 0,
@@ -82,8 +90,19 @@ export default function AuditLogs() {
         if (user && userRole === "super_admin") {
             fetchLogs();
             fetchStats();
+            fetchCompanies();
         }
     }, [user, userRole, dateRange]);
+
+    const actionOptions = useMemo(
+        () => Array.from(new Set(logs.map((log) => log.action_type))).sort(),
+        [logs]
+    );
+
+    const targetOptions = useMemo(
+        () => Array.from(new Set(logs.map((log) => log.target_type))).sort(),
+        [logs]
+    );
 
     const fetchLogs = async () => {
         try {
@@ -157,6 +176,20 @@ export default function AuditLogs() {
         }
     };
 
+    const fetchCompanies = async () => {
+        try {
+            const { data, error } = await supabase
+                .from("companies")
+                .select("id, name")
+                .order("name", { ascending: true });
+
+            if (error) throw error;
+            setCompanies((data || []) as CompanyOption[]);
+        } catch (error) {
+            console.error("Error fetching companies:", error);
+        }
+    };
+
     const handleExport = () => {
         const csv = [
             ["Date", "Actor", "Action", "Target Type", "Target Name", "IP Address", "Company"],
@@ -199,7 +232,14 @@ export default function AuditLogs() {
         const matchesTarget =
             targetFilter === "all" || log.target_type === targetFilter;
 
-        return matchesSearch && matchesAction && matchesTarget;
+        const matchesCompany =
+            companyFilter === "all" || log.company_id === companyFilter;
+
+        const matchesActor =
+            !actorFilter ||
+            log.actor_email.toLowerCase().includes(actorFilter.toLowerCase());
+
+        return matchesSearch && matchesAction && matchesTarget && matchesCompany && matchesActor;
     });
 
     const getActionBadgeVariant = (action: string) => {
@@ -269,7 +309,7 @@ export default function AuditLogs() {
             </div>
 
             {/* Filters and Actions */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
                 <Card className="md:col-span-2">
                     <CardContent className="pt-6">
                         <div className="relative">
@@ -292,11 +332,11 @@ export default function AuditLogs() {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">All Actions</SelectItem>
-                                <SelectItem value="block_company">Block Company</SelectItem>
-                                <SelectItem value="unblock_company">Unblock Company</SelectItem>
-                                <SelectItem value="modify_subscription">Modify Subscription</SelectItem>
-                                <SelectItem value="extend_trial">Extend Trial</SelectItem>
-                                <SelectItem value="view">View</SelectItem>
+                                {actionOptions.map((action) => (
+                                    <SelectItem key={action} value={action}>
+                                        {action}
+                                    </SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </CardContent>
@@ -310,10 +350,29 @@ export default function AuditLogs() {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">All Targets</SelectItem>
-                                <SelectItem value="company">Company</SelectItem>
-                                <SelectItem value="user">User</SelectItem>
-                                <SelectItem value="subscription">Subscription</SelectItem>
-                                <SelectItem value="invoice">Invoice</SelectItem>
+                                {targetOptions.map((target) => (
+                                    <SelectItem key={target} value={target}>
+                                        {target}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardContent className="pt-6">
+                        <Select value={companyFilter} onValueChange={setCompanyFilter}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="All Companies" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Companies</SelectItem>
+                                {companies.map((company) => (
+                                    <SelectItem key={company.id} value={company.id}>
+                                        {company.name}
+                                    </SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </CardContent>
@@ -331,6 +390,16 @@ export default function AuditLogs() {
                                 <SelectItem value="90days">Last 90 days</SelectItem>
                             </SelectContent>
                         </Select>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardContent className="pt-6">
+                        <Input
+                            placeholder="Filter by actor email"
+                            value={actorFilter}
+                            onChange={(e) => setActorFilter(e.target.value)}
+                        />
                     </CardContent>
                 </Card>
             </div>

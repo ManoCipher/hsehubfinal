@@ -389,7 +389,7 @@ export default function Reports() {
           p_target_type: "reports",
           p_target_id: null,
           p_target_name: "Custom Reports Configuration",
-          p_details: { count: reports.length },
+          p_details: { count: reports.length, target_ref: "custom_reports" },
           p_company_id: companyId,
         });
         console.log("✅ Custom reports update log created, count:", reports.length);

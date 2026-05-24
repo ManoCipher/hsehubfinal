@@ -3750,7 +3750,9 @@ export default function Settings() {
                                     .insert([
                                       { name: value, company_id: companyId },
                                     ])
-                                    .then(({ error }) => {
+                                    .select()
+                                    .single()
+                                    .then(({ data, error }) => {
                                       if (error) {
                                         toast({
                                           title: "Error",
@@ -3762,6 +3764,13 @@ export default function Settings() {
                                           title: "Success",
                                           description:
                                             "Location added successfully",
+                                        });
+                                        logAction({
+                                          action: "create_location",
+                                          targetType: "location",
+                                          targetId: data?.id || null,
+                                          targetName: value,
+                                          details: { source: "quick_add" },
                                         });
                                         input.value = "";
                                         fetchAllData();
@@ -3782,7 +3791,9 @@ export default function Settings() {
                                   .insert([
                                     { name: value, company_id: companyId },
                                   ])
-                                  .then(({ error }) => {
+                                  .select()
+                                  .single()
+                                  .then(({ data, error }) => {
                                     if (error) {
                                       toast({
                                         title: "Error",
@@ -3794,6 +3805,13 @@ export default function Settings() {
                                         title: "Success",
                                         description:
                                           "Location added successfully",
+                                      });
+                                      logAction({
+                                        action: "create_location",
+                                        targetType: "location",
+                                        targetId: data?.id || null,
+                                        targetName: value,
+                                        details: { source: "quick_add" },
                                       });
                                       if (input) input.value = "";
                                       fetchAllData();
@@ -3897,7 +3915,9 @@ export default function Settings() {
                                     .insert([
                                       { name: value, company_id: companyId },
                                     ])
-                                    .then(({ error }) => {
+                                    .select()
+                                    .single()
+                                    .then(({ data, error }) => {
                                       if (error) {
                                         toast({
                                           title: "Error",
@@ -3909,6 +3929,13 @@ export default function Settings() {
                                           title: "Success",
                                           description:
                                             "Department added successfully",
+                                        });
+                                        logAction({
+                                          action: "create_department",
+                                          targetType: "department",
+                                          targetId: data?.id || null,
+                                          targetName: value,
+                                          details: { source: "quick_add" },
                                         });
                                         input.value = "";
                                         fetchAllData();
@@ -3929,7 +3956,9 @@ export default function Settings() {
                                   .insert([
                                     { name: value, company_id: companyId },
                                   ])
-                                  .then(({ error }) => {
+                                  .select()
+                                  .single()
+                                  .then(({ data, error }) => {
                                     if (error) {
                                       toast({
                                         title: "Error",
@@ -3941,6 +3970,13 @@ export default function Settings() {
                                         title: "Success",
                                         description:
                                           "Department added successfully",
+                                      });
+                                      logAction({
+                                        action: "create_department",
+                                        targetType: "department",
+                                        targetId: data?.id || null,
+                                        targetName: value,
+                                        details: { source: "quick_add" },
                                       });
                                       if (input) input.value = "";
                                       fetchAllData();
@@ -4186,7 +4222,9 @@ export default function Settings() {
                                     .insert([
                                       { name: value, company_id: companyId },
                                     ])
-                                    .then(({ error }) => {
+                                    .select()
+                                    .single()
+                                    .then(({ data, error }) => {
                                       if (error) {
                                         toast({
                                           title: "Error",
@@ -4198,6 +4236,13 @@ export default function Settings() {
                                           title: "Success",
                                           description:
                                             "Exposure group added successfully",
+                                        });
+                                        logAction({
+                                          action: "create_exposure_group",
+                                          targetType: "exposure_group",
+                                          targetId: data?.id || null,
+                                          targetName: value,
+                                          details: { source: "quick_add" },
                                         });
                                         input.value = "";
                                         fetchAllData();
@@ -4218,7 +4263,9 @@ export default function Settings() {
                                   .insert([
                                     { name: value, company_id: companyId },
                                   ])
-                                  .then(({ error }) => {
+                                  .select()
+                                  .single()
+                                  .then(({ data, error }) => {
                                     if (error) {
                                       toast({
                                         title: "Error",
@@ -4230,6 +4277,13 @@ export default function Settings() {
                                         title: "Success",
                                         description:
                                           "Exposure group added successfully",
+                                      });
+                                      logAction({
+                                        action: "create_exposure_group",
+                                        targetType: "exposure_group",
+                                        targetId: data?.id || null,
+                                        targetName: value,
+                                        details: { source: "quick_add" },
                                       });
                                       if (input) input.value = "";
                                       fetchAllData();
