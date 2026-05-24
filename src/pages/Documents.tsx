@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuditLog } from "@/hooks/useAuditLog";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,6 +66,7 @@ export default function Documents() {
   const { companyId, user } = useAuth();
   const { hasDetailedPermission } = usePermissions();
   const { toast } = useToast();
+  const { logAction } = useAuditLog();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [documents, setDocuments] = useState<DocumentWithUploader[]>([]);
@@ -227,11 +229,26 @@ export default function Documents() {
         uploaded_by: user.id,
       };
 
-      const { error: dbError } = await supabase
+      const { data: createdDoc, error: dbError } = await supabase
         .from("documents")
-        .insert(documentData);
+        .insert(documentData)
+        .select()
+        .single();
 
       if (dbError) throw dbError;
+
+      logAction({
+        action: "upload_document",
+        targetType: "document",
+        targetId: createdDoc?.id || null,
+        targetName: uploadTitle.trim(),
+        details: {
+          file_name: uploadFile.name,
+          category: uploadCategory,
+          file_size: uploadFile.size,
+          is_public: uploadIsPublic,
+        },
+      });
 
       toast({
         title: "Success",
@@ -332,6 +349,17 @@ export default function Documents() {
       toast({
         title: "Success",
         description: "Document deleted successfully",
+      });
+
+      logAction({
+        action: "delete_document",
+        targetType: "document",
+        targetId: doc.id,
+        targetName: doc.title,
+        details: {
+          file_name: doc.file_name,
+          category: doc.category,
+        },
       });
 
       fetchDocuments();

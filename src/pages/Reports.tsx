@@ -387,9 +387,9 @@ export default function Reports() {
         await supabase.rpc("create_audit_log", {
           p_action_type: "update_custom_reports",
           p_target_type: "reports",
-          p_target_id: "custom_reports",
+          p_target_id: null,
           p_target_name: "Custom Reports Configuration",
-          p_details: { count: reports.length },
+          p_details: { count: reports.length, target_ref: "custom_reports" },
           p_company_id: companyId,
         });
         console.log("✅ Custom reports update log created, count:", reports.length);

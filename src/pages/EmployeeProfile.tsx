@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuditLog } from "@/hooks/useAuditLog";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -167,6 +168,7 @@ export default function EmployeeProfile() {
   const navigate = useNavigate();
   const { companyId, user } = useAuth();
   const { hasPermission, hasDetailedPermission } = usePermissions();
+  const { logAction } = useAuditLog();
 
   const [employee, setEmployee] = useState<EmployeeData | null>(null);
   const [editMode, setEditMode] = useState<{ [key: string]: boolean }>({});
@@ -1025,6 +1027,20 @@ export default function EmployeeProfile() {
         }
       );
 
+      const isNameField = field === "first_name" || field === "last_name";
+      const oldValue = isNameField
+        ? employee?.full_name
+        : employee?.[field as keyof EmployeeData];
+      const newValue = isNameField ? updateData.full_name : updateData[field];
+
+      logAction({
+        action: "update_employee",
+        targetType: "employee",
+        targetId: id,
+        targetName: updateData.full_name || employee?.full_name || "Employee",
+        details: { field, old_value: oldValue, new_value: newValue },
+      });
+
       toast.success("Updated successfully");
       setEditMode({ ...editMode, [field]: false });
       fetchEmployeeData();
@@ -1066,6 +1082,14 @@ export default function EmployeeProfile() {
         `Changed ${field} value`,
         { field, newValue: value }
       );
+
+      logAction({
+        action: "update_employee",
+        targetType: "employee",
+        targetId: id,
+        targetName: employee?.full_name || "Employee",
+        details: { field, new_value: value },
+      });
 
       toast.success("Updated successfully");
       setEditingSpecialField(null);
@@ -1152,6 +1176,17 @@ export default function EmployeeProfile() {
         "create",
         notes.substring(0, 100) + (notes.length > 100 ? "..." : "")
       );
+
+      logAction({
+        action: "add_employee_note",
+        targetType: "employee",
+        targetId: id,
+        targetName: employee?.full_name || "Employee",
+        details: {
+          note_preview: textContent.substring(0, 100),
+          visibility: visibleTo,
+        },
+      });
 
       // Auto-send in-app notifications to @mentioned users on save
       try {
@@ -1268,6 +1303,14 @@ export default function EmployeeProfile() {
         "delete",
         noteContent.substring(0, 100) + (noteContent.length > 100 ? "..." : "")
       );
+
+      logAction({
+        action: "delete_employee_note",
+        targetType: "employee",
+        targetId: id,
+        targetName: employee?.full_name || "Employee",
+        details: { note_id: noteId, note_preview: noteContent.substring(0, 100) },
+      });
 
       toast.success("Note deleted successfully");
       fetchEmployeeData();
@@ -1847,6 +1890,14 @@ export default function EmployeeProfile() {
         { status: isActive ? "active" : "inactive" }
       );
 
+      logAction({
+        action: "update_employee",
+        targetType: "employee",
+        targetId: id,
+        targetName: employee?.full_name || "Employee",
+        details: { field: "is_active", new_value: isActive },
+      });
+
       toast.success(`Employee ${isActive ? "activated" : "deactivated"}`);
       fetchEmployeeData();
       fetchActivityLogs();
@@ -1901,7 +1952,9 @@ export default function EmployeeProfile() {
       if (uploadError) throw uploadError;
 
       // Save document record
-      const { error: dbError } = await supabase.from("documents").insert({
+      const { data: createdDoc, error: dbError } = await supabase
+        .from("documents")
+        .insert({
         company_id: companyId,
         title: file.name.replace(/\.[^/.]+$/, ""),
         description: `Document for employee ${employee?.full_name || ""} (${employee?.employee_number || ""
@@ -1914,7 +1967,9 @@ export default function EmployeeProfile() {
         is_public: false,
         uploaded_by: user.id,
         tags: [id, employee?.employee_number || ""].filter(Boolean),
-      } as any);
+      } as any)
+        .select()
+        .single();
 
       if (dbError) throw dbError;
 
@@ -1924,6 +1979,19 @@ export default function EmployeeProfile() {
         `Uploaded file: ${file.name}`,
         { fileName: file.name, fileSize: file.size, mimeType: file.type }
       );
+
+      logAction({
+        action: "upload_document",
+        targetType: "document",
+        targetId: createdDoc?.id || null,
+        targetName: file.name,
+        details: {
+          file_name: file.name,
+          file_size: file.size,
+          employee_id: id,
+          employee_name: employee?.full_name,
+        },
+      });
 
       toast.success("Document uploaded successfully");
       fetchDocuments();

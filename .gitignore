@@ -23,4 +23,4 @@ dist-ssr
 *.sln
 *.sw?
 WorkNote.txt
-src/pages/PROMPT.md
+PROMPT.md
