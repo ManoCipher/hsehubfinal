@@ -593,8 +593,8 @@ export default function Dashboard() {
         <div>
           <h2 className="text-2xl sm:text-3xl font-bold mb-2">
             {companyName
-              ? `${companyName} ${t("dashboard.title")}`
-              : `${t("dashboard.title")}`}
+              ? <span>{companyName} {t("dashboard.title")}</span>
+              : <span>{t("dashboard.title")}</span>}
           </h2>
           <p className="text-sm sm:text-base text-muted-foreground">
             {t("dashboard.welcome")}

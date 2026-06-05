@@ -110,5 +110,5 @@ export default function ProtectedRoute({
     return null;
   }
 
-  return <>{children}</>;
+  return children;
 }

@@ -51,5 +51,5 @@ export default function SuperAdminRoute({ children }: SuperAdminRouteProps) {
     return null;
   }
 
-  return <>{children}</>;
+  return children;
 }

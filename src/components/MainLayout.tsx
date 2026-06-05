@@ -248,10 +248,10 @@ export default function MainLayout({ children }: Props) {
             <Building2 className="w-4 h-4 text-gray-600 dark:text-gray-400" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                {companyName || "Company"}
+                <span>{companyName || "Company"}</span>
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
-                {roleName || userRole?.replace("_", " ") || "User"}
+                <span>{roleName || (userRole ? userRole.replace("_", " ") : "User")}</span>
               </p>
             </div>
           </div>
@@ -279,7 +279,7 @@ export default function MainLayout({ children }: Props) {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="flex items-center gap-2">
                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-white font-semibold">
-                      {companyName?.charAt(0) || "U"}
+                      <span>{companyName?.charAt(0) || "U"}</span>
                     </div>
                     <ChevronDown className="w-4 h-4" />
                   </Button>

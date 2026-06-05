@@ -593,9 +593,9 @@ export default function Incidents() {
               <AlertTriangle className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h2 className="text-3xl font-bold">{t("incidents.title")}</h2>
+              <h2 className="text-3xl font-bold"><span>{t("incidents.title")}</span></h2>
               <p className="text-muted-foreground">
-                {t("incidents.description")}
+                <span>{t("incidents.description")}</span>
               </p>
             </div>
           </div>
@@ -612,7 +612,7 @@ export default function Incidents() {
                 <p className="text-sm text-white/80 font-medium uppercase tracking-wide">
                   {t("incidents.total")}
                 </p>
-                <p className="text-4xl font-bold mt-2">{incidents.length}</p>
+                <p className="text-4xl font-bold mt-2"><span>{incidents.length}</span></p>
               </div>
               <Activity className="w-10 h-10 text-white/80" />
             </div>
@@ -627,7 +627,7 @@ export default function Incidents() {
                   {t("incidents.injuries")}
                 </p>
                 <p className="text-4xl font-bold mt-2">
-                  {incidents.filter((i) => i.incident_type === "injury").length}
+                  <span>{incidents.filter((i) => i.incident_type === "injury").length}</span>
                 </p>
               </div>
               <AlertTriangle className="w-10 h-10 text-white/80" />
@@ -643,10 +643,10 @@ export default function Incidents() {
                   {t("incidents.nearMisses")}
                 </p>
                 <p className="text-4xl font-bold mt-2">
-                  {
+                  <span>{
                     incidents.filter((i) => i.incident_type === "near_miss")
                       .length
-                  }
+                  }</span>
                 </p>
               </div>
               <AlertCircle className="w-10 h-10 text-white/80" />
@@ -662,10 +662,10 @@ export default function Incidents() {
                   {t("incidents.underInvestigation")}
                 </p>
                 <p className="text-4xl font-bold mt-2">
-                  {
+                  <span>{
                     incidents.filter((i) => i.investigation_status === "open")
                       .length
-                  }
+                  }</span>
                 </p>
               </div>
               <Eye className="w-10 h-10 text-white/80" />
@@ -683,9 +683,9 @@ export default function Incidents() {
               </div>
               <div>
                 <CardTitle className="text-2xl">
-                  {t("incidents.reports")}
+                  <span>{t("incidents.reports")}</span>
                 </CardTitle>
-                <CardDescription>{t("incidents.reportsDesc")}</CardDescription>
+                <CardDescription><span>{t("incidents.reportsDesc")}</span></CardDescription>
               </div>
             </div>
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -698,9 +698,11 @@ export default function Incidents() {
               <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>
-                    {editingIncident
-                      ? t("incidents.editIncident")
-                      : t("incidents.reportNew")}
+                    <span>
+                      {editingIncident
+                        ? t("incidents.editIncident")
+                        : t("incidents.reportNew")}
+                    </span>
                   </DialogTitle>
                   <DialogDescription>
                     {t("incidents.documentDesc")}
@@ -1016,10 +1018,12 @@ export default function Incidents() {
                       {t("common.cancel")}
                     </Button>
                     <Button type="submit">
-                      {editingIncident
-                        ? t("common.update")
-                        : t("incidents.report")}{" "}
-                      {t("incidents.incident")}
+                      <span>
+                        {editingIncident
+                          ? t("common.update")
+                          : t("incidents.report")}
+                      </span>{" "}
+                      <span>{t("incidents.incident")}</span>
                     </Button>
                   </div>
                 </form>
