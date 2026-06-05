@@ -168,7 +168,7 @@ export default function MainLayout({ children }: Props) {
             </div>
           ) : (
             /* Regular Company User Menu */
-            <>
+            <div className="space-y-0.5">
               {hasPermission("dashboard") && (
                 <Link to="/dashboard" className={getLinkClasses("/dashboard")}>
                   <BarChart className="w-4 h-4" />
@@ -239,7 +239,7 @@ export default function MainLayout({ children }: Props) {
                   </Link>
                 </div>
               )}
-            </>
+            </div>
           )}
         </nav>
 

@@ -68,7 +68,7 @@ export default function Auth() {
             onClick={() => navigate("/")}
             className="hover:bg-transparent hover:text-primary"
           >
-            ← Back to Homepage
+            <span>← Back to Homepage</span>
           </Button>
         </div>
         <div className="text-center mb-8">
@@ -83,19 +83,19 @@ export default function Auth() {
             </div>
           </div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
-            SafetyHub
+            <span>SafetyHub</span>
           </h1>
-          <p className="text-muted-foreground mt-2">HSE Management Platform</p>
+          <p className="text-muted-foreground mt-2"><span>HSE Management Platform</span></p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Welcome Back</CardTitle>
+            <CardTitle><span>Welcome Back</span></CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="login-email">Email</Label>
+                <Label htmlFor="login-email"><span>Email</span></Label>
                 <Input
                   id="login-email"
                   type="email"
@@ -106,7 +106,7 @@ export default function Auth() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="login-password">Password</Label>
+                <Label htmlFor="login-password"><span>Password</span></Label>
                 <div className="relative">
                   <Input
                     id="login-password"
@@ -132,7 +132,7 @@ export default function Auth() {
                 </div>
               </div>
               <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Signing in..." : "Sign In"}
+                <span>{isLoading ? "Signing in..." : "Sign In"}</span>
               </Button>
             </form>
           </CardContent>
@@ -141,14 +141,14 @@ export default function Auth() {
         {/* Company Registration CTA */}
         <div className="mt-6 text-center">
           <p className="text-sm text-muted-foreground mb-2">
-            Don't have an account yet?
+            <span>Don't have an account yet?</span>
           </p>
           <Button
             variant="outline"
             onClick={() => navigate("/register")}
             className="w-full"
           >
-            Register Your Company - Start Free Trial
+            <span>Register Your Company - Start Free Trial</span>
           </Button>
         </div>
       </div>

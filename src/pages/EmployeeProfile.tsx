@@ -727,19 +727,31 @@ export default function EmployeeProfile() {
     if (!companyId) return;
 
     try {
-      const { data, error } = await supabase
+      // Fetch templates
+      const { data: templates, error: templatesError } = await supabase
+        .from("profile_field_templates")
+        .select("*")
+        .eq("company_id", companyId);
+
+      // Fetch fields
+      const { data: fields, error: fieldsError } = await supabase
         .from("profile_fields")
         .select("*")
-        .eq("company_id", companyId)
-        .order("display_order", { ascending: true });
+        .eq("company_id", companyId);
 
-      if (error) {
-        console.log("No profile field templates found");
+      if (templatesError || fieldsError) {
+        console.log("Error fetching profile field templates");
         setProfileFieldTemplates([]);
         return;
       }
 
-      setProfileFieldTemplates(data || []);
+      // Group fields by template
+      const formattedTemplates = (templates || []).map((t: any) => ({
+        ...t,
+        fields: (fields || []).filter((f: any) => f.template_id === t.id)
+      }));
+
+      setProfileFieldTemplates(formattedTemplates);
     } catch (error) {
       console.error("Error fetching profile field templates:", error);
       setProfileFieldTemplates([]);
@@ -748,27 +760,29 @@ export default function EmployeeProfile() {
 
   const applyTemplate = async () => {
     if (selectedTemplateIds.length === 0) {
-      toast.error("Please select at least one template field to apply");
+      toast.error("Please select at least one template to apply");
       return;
     }
 
     try {
-      // Filter to only selected templates
+      // Get all fields from selected templates
       const selectedTemplates = profileFieldTemplates.filter(template =>
         selectedTemplateIds.includes(template.id)
       );
+      
+      const fieldsToAdd = selectedTemplates.flatMap(t => t.fields || []);
 
-      // Convert selected templates to profile fields format
-      const newFields = selectedTemplates.map((template) => ({
-        id: `${template.field_name}_${Date.now()}`,
-        label: template.field_label,
-        type: template.field_type === "text" ? "Single-line text" :
-          template.field_type === "number" ? "Number" :
-            template.field_type === "date" ? "Date" :
-              template.field_type === "boolean" ? "Yes/No" : "Single-line text",
-        value: template.field_type === "boolean" ? false : "",
-        is_required: template.is_required,
-        extracted_from_resume: template.extracted_from_resume,
+      // Convert selected fields to profile fields format
+      const newFields = fieldsToAdd.map((field: any) => ({
+        id: `${field.field_name}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        label: field.field_label,
+        type: field.field_type === "text" ? "Single-line text" :
+          field.field_type === "number" ? "Number" :
+            field.field_type === "date" ? "Date" :
+              field.field_type === "boolean" ? "Yes/No" : "Single-line text",
+        value: field.field_type === "boolean" ? false : "",
+        is_required: field.is_required,
+        extracted_from_resume: false,
         created_at: new Date().toISOString(),
       }));
 
@@ -790,7 +804,7 @@ export default function EmployeeProfile() {
         "Applied profile field template",
         "create",
         `Added ${newFields.length} fields from Settings template`,
-        { fieldsAdded: newFields.length, templates: selectedTemplates.map(t => t.field_label) }
+        { fieldsAdded: newFields.length, templates: selectedTemplates.map(t => t.name) }
       );
       await fetchActivityLogs();
     } catch (error) {
@@ -3330,15 +3344,9 @@ export default function EmployeeProfile() {
                                     {index + 1}
                                   </div>
                                   <div className="flex-1">
-                                    <div className="font-medium">{template.field_label}</div>
+                                    <div className="font-medium">{template.name}</div>
                                     <div className="text-xs text-muted-foreground flex items-center gap-2 mt-1">
-                                      <span className="capitalize">{template.field_type}</span>
-                                      {template.is_required && (
-                                        <span className="text-destructive">• Required</span>
-                                      )}
-                                      {template.extracted_from_resume && (
-                                        <span className="text-green-600">• Resume Extract</span>
-                                      )}
+                                      <span>{template.fields?.length || 0} fields</span>
                                     </div>
                                   </div>
                                 </div>

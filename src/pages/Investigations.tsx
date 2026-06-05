@@ -966,11 +966,13 @@ export default function Investigations() {
 
     const matchesDateFrom =
       !filterDateFrom ||
-      (investigation.due_date && investigation.due_date >= filterDateFrom);
+      (investigation.due_date && investigation.due_date >= filterDateFrom) ||
+      (investigation.appointment_date && investigation.appointment_date >= filterDateFrom);
 
     const matchesDateTo =
       !filterDateTo ||
-      (investigation.due_date && investigation.due_date <= filterDateTo);
+      (investigation.due_date && investigation.due_date <= filterDateTo) ||
+      (investigation.appointment_date && investigation.appointment_date <= filterDateTo);
 
     return (
       matchesSearch &&
@@ -1010,6 +1012,18 @@ export default function Investigations() {
       const employeeCheckups = healthCheckups.filter((checkup: any) => {
         const isForEmployee = checkup.employee_id === employee.id;
         if (!isForEmployee) return false;
+
+        const matchesDateFrom =
+          !filterDateFrom ||
+          (checkup.due_date && checkup.due_date >= filterDateFrom) ||
+          (checkup.appointment_date && checkup.appointment_date >= filterDateFrom);
+
+        const matchesDateTo =
+          !filterDateTo ||
+          (checkup.due_date && checkup.due_date <= filterDateTo) ||
+          (checkup.appointment_date && checkup.appointment_date <= filterDateTo);
+          
+        if (!matchesDateFrom || !matchesDateTo) return false;
 
         if (filterCheckUpType === "all") return true;
 
@@ -1117,7 +1131,17 @@ export default function Investigations() {
       (filterCheckUpType === "planned" && checkup.status === "planned") ||
       (filterCheckUpType === "open" && checkup.status === "open");
 
-    return matchesSearch && matchesDepartment && matchesGroup && matchesStatus;
+    const matchesDateFrom =
+      !filterDateFrom ||
+      (checkup.due_date && checkup.due_date >= filterDateFrom) ||
+      (checkup.appointment_date && checkup.appointment_date >= filterDateFrom);
+
+    const matchesDateTo =
+      !filterDateTo ||
+      (checkup.due_date && checkup.due_date <= filterDateTo) ||
+      (checkup.appointment_date && checkup.appointment_date <= filterDateTo);
+
+    return matchesSearch && matchesDepartment && matchesGroup && matchesStatus && matchesDateFrom && matchesDateTo;
   });
 
   const sortedDateRows = [...filteredDateCheckups].sort((a: any, b: any) => {
@@ -1169,7 +1193,17 @@ export default function Investigations() {
       (filterCheckUpType === "planned" && checkup.status === "planned") ||
       (filterCheckUpType === "open" && checkup.status === "open");
 
-    return matchesSearch && matchesDepartment && matchesGroup && matchesStatus;
+    const matchesDateFrom =
+      !filterDateFrom ||
+      (checkup.due_date && checkup.due_date >= filterDateFrom) ||
+      (checkup.appointment_date && checkup.appointment_date >= filterDateFrom);
+
+    const matchesDateTo =
+      !filterDateTo ||
+      (checkup.due_date && checkup.due_date <= filterDateTo) ||
+      (checkup.appointment_date && checkup.appointment_date <= filterDateTo);
+
+    return matchesSearch && matchesDepartment && matchesGroup && matchesStatus && matchesDateFrom && matchesDateTo;
   });
 
   const sortedCheckupRows = [...filteredCheckupRows].sort((a: any, b: any) => {

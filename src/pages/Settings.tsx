@@ -216,6 +216,13 @@ export default function Settings() {
   const [myTickets, setMyTickets] = useState<any[]>([]);
 
   // Profile Fields State
+  const [profileTemplates, setProfileTemplates] = useState<any[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
+  const [templateFormName, setTemplateFormName] = useState("");
+  const [editingTemplate, setEditingTemplate] = useState<any>(null);
+  const [isSubmittingTemplate, setIsSubmittingTemplate] = useState(false);
+
   const [isProfileFieldDialogOpen, setIsProfileFieldDialogOpen] = useState(false);
   const [editingProfileField, setEditingProfileField] = useState<any>(null);
   const [profileFieldForm, setProfileFieldForm] = useState({
@@ -347,6 +354,7 @@ export default function Settings() {
       fetchCustomRoles();
       fetchApprovalWorkflows();
       fetchProfileFields();
+      fetchProfileTemplates();
       fetchISOStandards();
       fetchGInvestigations();
       fetchAllIsoCriteria();
@@ -824,6 +832,26 @@ export default function Settings() {
       setApprovalWorkflows(formatted);
     } catch (err: unknown) {
       console.error("Error fetching approval workflows:", err);
+    }
+  };
+
+  const fetchProfileTemplates = async () => {
+    if (!companyId) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("profile_field_templates")
+        .select("*")
+        .eq("company_id", companyId)
+        .order("name", { ascending: true });
+
+      if (error) throw error;
+      setProfileTemplates(data || []);
+      if (data && data.length > 0 && !selectedTemplateId) {
+        setSelectedTemplateId(data[0].id);
+      }
+    } catch (err: unknown) {
+      console.error("Error fetching profile templates:", err);
     }
   };
 
@@ -2679,6 +2707,67 @@ export default function Settings() {
     }
   };
 
+  // Profile Templates Management Functions
+  const openTemplateDialog = (template?: any) => {
+    if (template) {
+      setEditingTemplate(template);
+      setTemplateFormName(template.name);
+    } else {
+      setEditingTemplate(null);
+      setTemplateFormName("");
+    }
+    setIsTemplateDialogOpen(true);
+  };
+
+  const closeTemplateDialog = () => {
+    setIsTemplateDialogOpen(false);
+    setEditingTemplate(null);
+    setTemplateFormName("");
+  };
+
+  const saveProfileTemplate = async () => {
+    if (!companyId || !templateFormName) return;
+    setIsSubmittingTemplate(true);
+    try {
+      if (editingTemplate) {
+        const { error } = await supabase
+          .from("profile_field_templates")
+          .update({ name: templateFormName })
+          .eq("id", editingTemplate.id);
+        if (error) throw error;
+        toast({ title: t("settings.success"), description: "Template updated successfully" });
+      } else {
+        const { error } = await supabase
+          .from("profile_field_templates")
+          .insert([{ company_id: companyId, name: templateFormName }]);
+        if (error) throw error;
+        toast({ title: t("settings.success"), description: "Template created successfully" });
+      }
+      fetchProfileTemplates();
+      closeTemplateDialog();
+    } catch (err: any) {
+      toast({ title: t("settings.error"), description: err.message, variant: "destructive" });
+    } finally {
+      setIsSubmittingTemplate(false);
+    }
+  };
+
+  const deleteProfileTemplate = async (id: string) => {
+    if (!companyId) return;
+    try {
+      const { error } = await supabase
+        .from("profile_field_templates")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+      toast({ title: t("settings.success"), description: "Template deleted successfully" });
+      if (selectedTemplateId === id) setSelectedTemplateId(null);
+      fetchProfileTemplates();
+    } catch (err: any) {
+      toast({ title: t("settings.error"), description: err.message, variant: "destructive" });
+    }
+  };
+
   // Profile Fields Management Functions
   const openProfileFieldDialog = (field?: any) => {
     if (field) {
@@ -2751,6 +2840,7 @@ export default function Settings() {
               field_name: profileFieldForm.fieldName,
               field_label: profileFieldForm.fieldLabel,
               field_type: profileFieldForm.fieldType,
+              template_id: selectedTemplateId,
               display_order: profileFields.length,
             },
           ]);
@@ -4084,95 +4174,186 @@ export default function Settings() {
 
               {/* Tab: Profile Fields */}
               <TabsContent value="profile-fields">
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle>{t("settings.profileFieldsTitle")}</CardTitle>
-                        <CardDescription>
-                          {t("settings.profileFieldsSubtitle")}
-                        </CardDescription>
+                <div className="grid grid-cols-1 md:grid-cols-[250px_1fr] gap-6">
+                  {/* Templates List */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg">Templates</CardTitle>
+                        <Button variant="ghost" size="icon" onClick={() => openTemplateDialog()}>
+                          <Plus className="w-4 h-4" />
+                        </Button>
                       </div>
-                      <Button onClick={() => openProfileFieldDialog()}>
-                        <Plus className="w-4 h-4 mr-2" />
-                        {t("settings.addProfileField")}
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="rounded-md border">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>{t("settings.fieldLabel")}</TableHead>
-                            <TableHead>{t("settings.fieldName")}</TableHead>
-                            <TableHead>{t("settings.fieldType")}</TableHead>
-                            <TableHead className="text-right">{t("common.actions")}</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {profileFields.length === 0 ? (
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <div className="space-y-1 p-2">
+                        {profileTemplates.length === 0 ? (
+                          <div className="text-center p-4 text-sm text-muted-foreground">
+                            No templates found
+                          </div>
+                        ) : (
+                          profileTemplates.map((template) => (
+                            <div
+                              key={template.id}
+                              className={`flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors ${selectedTemplateId === template.id ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted'}`}
+                              onClick={() => setSelectedTemplateId(template.id)}
+                            >
+                              <span className="truncate pr-2">{template.name}</span>
+                              <div className="flex items-center opacity-0 hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); openTemplateDialog(template); }}>
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={(e) => { e.stopPropagation(); deleteProfileTemplate(template.id); }}>
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Fields for Selected Template */}
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle>{t("settings.profileFieldsTitle")}</CardTitle>
+                          <CardDescription>
+                            Configure fields for template: {profileTemplates.find(t => t.id === selectedTemplateId)?.name || 'None selected'}
+                          </CardDescription>
+                        </div>
+                        <Button onClick={() => openProfileFieldDialog()} disabled={!selectedTemplateId}>
+                          <Plus className="w-4 h-4 mr-2" />
+                          {t("settings.addProfileField")}
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="rounded-md border">
+                        <Table>
+                          <TableHeader>
                             <TableRow>
-                              <TableCell
-                                colSpan={4}
-                                className="text-center py-8 text-muted-foreground"
-                              >
-                                {t("settings.noProfileFields")}
-                              </TableCell>
+                              <TableHead>{t("settings.fieldLabel")}</TableHead>
+                              <TableHead>{t("settings.fieldName")}</TableHead>
+                              <TableHead>{t("settings.fieldType")}</TableHead>
+                              <TableHead className="text-right">{t("common.actions")}</TableHead>
                             </TableRow>
-                          ) : (
-                            profileFields.map((field) => (
-                              <TableRow key={field.id}>
-                                <TableCell className="font-medium">
-                                  {field.field_label}
-                                  {field.is_required && (
-                                    <span className="text-destructive ml-1">*</span>
-                                  )}
-                                </TableCell>
-                                <TableCell className="font-mono text-sm text-muted-foreground">
-                                  {field.field_name}
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant="secondary">
-                                    {field.field_type}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  <div className="flex justify-end gap-2">
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() => openProfileFieldDialog(field)}
-                                        >
-                                          <Pencil className="w-4 h-4" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Edit</TooltipContent>
-                                    </Tooltip>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() => deleteProfileField(field.id)}
-                                        >
-                                          <Trash2 className="w-4 h-4 text-destructive" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Delete</TooltipContent>
-                                    </Tooltip>
-                                  </div>
+                          </TableHeader>
+                          <TableBody>
+                            {!selectedTemplateId ? (
+                              <TableRow>
+                                <TableCell
+                                  colSpan={4}
+                                  className="text-center py-8 text-muted-foreground"
+                                >
+                                  Please select or create a template to view fields.
                                 </TableCell>
                               </TableRow>
-                            ))
-                          )}
-                        </TableBody>
-                      </Table>
+                            ) : profileFields.filter(f => f.template_id === selectedTemplateId).length === 0 ? (
+                              <TableRow>
+                                <TableCell
+                                  colSpan={4}
+                                  className="text-center py-8 text-muted-foreground"
+                                >
+                                  {t("settings.noProfileFields")}
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              profileFields.filter(f => f.template_id === selectedTemplateId).map((field) => (
+                                <TableRow key={field.id}>
+                                  <TableCell className="font-medium">
+                                    {field.field_label}
+                                    {field.is_required && (
+                                      <span className="text-destructive ml-1">*</span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="font-mono text-sm text-muted-foreground">
+                                    {field.field_name}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="secondary">
+                                      {field.field_type}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex justify-end gap-2">
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => openProfileFieldDialog(field)}
+                                          >
+                                            <Pencil className="w-4 h-4" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Edit</TooltipContent>
+                                      </Tooltip>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => deleteProfileField(field.id)}
+                                          >
+                                            <Trash2 className="w-4 h-4 text-destructive" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Delete</TooltipContent>
+                                      </Tooltip>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Add/Edit Template Dialog */}
+                <Dialog open={isTemplateDialogOpen} onOpenChange={setIsTemplateDialogOpen}>
+                  <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                      <DialogTitle>
+                        {editingTemplate ? "Edit Template" : "Add Template"}
+                      </DialogTitle>
+                      <DialogDescription>
+                        Create a template to group profile fields.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="template-name">Template Name</Label>
+                        <Input
+                          id="template-name"
+                          placeholder="e.g. Template 1"
+                          value={templateFormName}
+                          onChange={(e) => setTemplateFormName(e.target.value)}
+                        />
+                      </div>
                     </div>
-                  </CardContent>
-                </Card>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={closeTemplateDialog} disabled={isSubmittingTemplate}>
+                        Cancel
+                      </Button>
+                      <Button onClick={saveProfileTemplate} disabled={isSubmittingTemplate}>
+                        {isSubmittingTemplate ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          "Save"
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
 
                 {/* Add/Edit Profile Field Dialog */}
                 <Dialog open={isProfileFieldDialogOpen} onOpenChange={setIsProfileFieldDialogOpen}>
