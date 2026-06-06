@@ -109,7 +109,7 @@ export default function MainLayout({ children }: Props) {
           </Link>
         </div>
 
-        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto no-scrollbar">
           {/* Show loading skeleton while permissions load */}
           {permissionsLoading ? (
             <div className="space-y-2 animate-pulse">
