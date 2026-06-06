@@ -62,11 +62,18 @@ export type AuditActionType =
 interface LogActionParams {
     action: AuditActionType;
     targetType: string;
-    targetId: string;
-    targetName: string;
+    targetId?: string | null;
+    targetName?: string | null;
+    description?: string;
     details?: Record<string, any>;
+    companyId?: string | null;
     companyIdOverride?: string;
 }
+
+const isUuid = (value: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        value
+    );
 
 /**
  * Hook to create audit log entries for any user action.
@@ -77,22 +84,44 @@ export function useAuditLog() {
     const { companyId } = useAuth();
 
     const logAction = useCallback(
-        async ({ action, targetType, targetId, targetName, details, companyIdOverride }: LogActionParams) => {
-            const effectiveCompanyId = companyIdOverride ?? companyId;
-
-            if (!effectiveCompanyId && action !== "login" && action !== "signup") {
+        async ({
+            action,
+            targetType,
+            targetId,
+            targetName,
+            description,
+            details,
+            companyId: overrideCompanyId,
+            companyIdOverride,
+        }: LogActionParams) => {
+            const resolvedCompanyId = companyIdOverride ?? overrideCompanyId ?? companyId;
+            if (!resolvedCompanyId && action !== "login" && action !== "signup") {
                 console.warn("⚠️ Attempted to log action without companyId:", action);
                 // Still attempt the log — the RPC will handle null company_id for system-level events
             }
 
             try {
+                const safeTargetId = targetId && isUuid(targetId) ? targetId : null;
+                const mergedDetails = {
+                    ...(details || {}),
+                    ...(description ? { description } : {}),
+                    ...(targetId && !safeTargetId ? { target_ref: targetId } : {}),
+                };
+
+                console.log("📝 Logging action:", {
+                    action,
+                    targetType,
+                    targetName,
+                    companyId: resolvedCompanyId,
+                });
+
                 const { error } = await supabase.rpc("create_audit_log", {
                     p_action_type: action,
                     p_target_type: targetType,
-                    p_target_id: (targetId && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(targetId)) ? targetId : null,
-                    p_target_name: targetName || "",
-                    p_details: details || {},
-                    p_company_id: effectiveCompanyId || null,
+                    p_target_id: safeTargetId,
+                    p_target_name: targetName || targetType,
+                    p_details: mergedDetails,
+                    p_company_id: resolvedCompanyId || null,
                 });
 
                 if (error) {

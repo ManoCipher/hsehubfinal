@@ -966,13 +966,12 @@ export default function Investigations() {
 
     const matchesDateFrom =
       !filterDateFrom ||
-      (investigation.due_date && investigation.due_date >= filterDateFrom) ||
-      (investigation.appointment_date && investigation.appointment_date >= filterDateFrom);
+      (investigation.due_date && investigation.due_date >= filterDateFrom);
 
     const matchesDateTo =
       !filterDateTo ||
-      (investigation.due_date && investigation.due_date <= filterDateTo) ||
-      (investigation.appointment_date && investigation.appointment_date <= filterDateTo);
+      ((investigation.due_date && investigation.due_date <= filterDateTo) ||
+        (investigation.appointment_date && investigation.appointment_date <= filterDateTo));
 
     return (
       matchesSearch &&
@@ -1015,13 +1014,13 @@ export default function Investigations() {
 
         const matchesDateFrom =
           !filterDateFrom ||
-          (checkup.due_date && checkup.due_date >= filterDateFrom) ||
-          (checkup.appointment_date && checkup.appointment_date >= filterDateFrom);
+          ((checkup.due_date && checkup.due_date >= filterDateFrom) ||
+            (checkup.appointment_date && checkup.appointment_date >= filterDateFrom));
 
         const matchesDateTo =
           !filterDateTo ||
-          (checkup.due_date && checkup.due_date <= filterDateTo) ||
-          (checkup.appointment_date && checkup.appointment_date <= filterDateTo);
+          ((checkup.due_date && checkup.due_date <= filterDateTo) ||
+            (checkup.appointment_date && checkup.appointment_date <= filterDateTo));
           
         if (!matchesDateFrom || !matchesDateTo) return false;
 
@@ -1131,17 +1130,19 @@ export default function Investigations() {
       (filterCheckUpType === "planned" && checkup.status === "planned") ||
       (filterCheckUpType === "open" && checkup.status === "open");
 
-    const matchesDateFrom =
-      !filterDateFrom ||
-      (checkup.due_date && checkup.due_date >= filterDateFrom) ||
-      (checkup.appointment_date && checkup.appointment_date >= filterDateFrom);
+    // From Date applies to due_date, To Date applies to appointment_date
+    const matchesDateFrom = !filterDateFrom || (checkup.due_date && checkup.due_date >= filterDateFrom);
 
-    const matchesDateTo =
-      !filterDateTo ||
-      (checkup.due_date && checkup.due_date <= filterDateTo) ||
-      (checkup.appointment_date && checkup.appointment_date <= filterDateTo);
+    const matchesDateTo = !filterDateTo || (checkup.appointment_date && checkup.appointment_date <= filterDateTo);
 
-    return matchesSearch && matchesDepartment && matchesGroup && matchesStatus && matchesDateFrom && matchesDateTo;
+    return (
+      matchesSearch &&
+      matchesDepartment &&
+      matchesGroup &&
+      matchesStatus &&
+      matchesDateFrom &&
+      matchesDateTo
+    );
   });
 
   const sortedDateRows = [...filteredDateCheckups].sort((a: any, b: any) => {
@@ -1193,17 +1194,19 @@ export default function Investigations() {
       (filterCheckUpType === "planned" && checkup.status === "planned") ||
       (filterCheckUpType === "open" && checkup.status === "open");
 
-    const matchesDateFrom =
-      !filterDateFrom ||
-      (checkup.due_date && checkup.due_date >= filterDateFrom) ||
-      (checkup.appointment_date && checkup.appointment_date >= filterDateFrom);
+    // From Date applies to due_date, To Date applies to appointment_date
+    const matchesDateFrom = !filterDateFrom || (checkup.due_date && checkup.due_date >= filterDateFrom);
 
-    const matchesDateTo =
-      !filterDateTo ||
-      (checkup.due_date && checkup.due_date <= filterDateTo) ||
-      (checkup.appointment_date && checkup.appointment_date <= filterDateTo);
+    const matchesDateTo = !filterDateTo || (checkup.appointment_date && checkup.appointment_date <= filterDateTo);
 
-    return matchesSearch && matchesDepartment && matchesGroup && matchesStatus && matchesDateFrom && matchesDateTo;
+    return (
+      matchesSearch &&
+      matchesDepartment &&
+      matchesGroup &&
+      matchesStatus &&
+      matchesDateFrom &&
+      matchesDateTo
+    );
   });
 
   const sortedCheckupRows = [...filteredCheckupRows].sort((a: any, b: any) => {
@@ -1500,7 +1503,7 @@ export default function Investigations() {
                               {formData.start_date ? (
                                 format(new Date(formData.start_date), "PPP")
                               ) : (
-                                <span>Pick a date</span>
+                                <span>{t("common.pickDate")}</span>
                               )}
                             </Button>
                           </PopoverTrigger>
@@ -1533,7 +1536,7 @@ export default function Investigations() {
                               {formData.due_date ? (
                                 format(new Date(formData.due_date), "PPP")
                               ) : (
-                                <span>Pick a date</span>
+                                <span>{t("common.pickDate")}</span>
                               )}
                             </Button>
                           </PopoverTrigger>
@@ -1566,7 +1569,7 @@ export default function Investigations() {
                               {formData.appointment_date ? (
                                 format(new Date(formData.appointment_date), "PPP")
                               ) : (
-                                <span>Pick a date</span>
+                                <span>{t("common.pickDate")}</span>
                               )}
                             </Button>
                           </PopoverTrigger>
@@ -1675,7 +1678,7 @@ export default function Investigations() {
             <Button
               variant={viewMode === "employee" ? "default" : "outline"}
               onClick={() => setViewMode("employee")}
-              className="flex-1"
+              className="flex-1 basis-0"
             >
               <Users className="w-4 h-4 mr-2" />
               {t("investigations.employeeView")}
@@ -1683,7 +1686,7 @@ export default function Investigations() {
             <Button
               variant={viewMode === "date" ? "default" : "outline"}
               onClick={() => setViewMode("date")}
-              className="flex-1"
+              className="flex-1 basis-0"
             >
               <CalendarIcon className="w-4 h-4 mr-2" />
               {t("investigations.dateView")}
@@ -1691,10 +1694,10 @@ export default function Investigations() {
             <Button
               variant={viewMode === "checkup" ? "default" : "outline"}
               onClick={() => setViewMode("checkup")}
-              className="flex-1"
+              className="flex-1 basis-0"
             >
               <FileDown className="w-4 h-4 mr-2" />
-              Checkup View
+              {t("investigations.checkupView")}
             </Button>
           </div>
 
@@ -1775,7 +1778,7 @@ export default function Investigations() {
                   {filterDateFrom ? (
                     format(new Date(filterDateFrom), "PPP")
                   ) : (
-                    <span>{t("common.fromDate")}</span>
+                    <span>{t("investigations.dueDate")}</span>
                   )}
                 </Button>
               </PopoverTrigger>
@@ -1799,7 +1802,7 @@ export default function Investigations() {
                   {filterDateTo ? (
                     format(new Date(filterDateTo), "PPP")
                   ) : (
-                    <span>{t("common.toDate")}</span>
+                    <span>{t("investigations.appointmentDate")}</span>
                   )}
                 </Button>
               </PopoverTrigger>
@@ -2065,31 +2068,32 @@ export default function Investigations() {
               </Table>
             ) : (
               // Checkup View - Shows all health checkups from all employees
-              <Table>
+              <div className="overflow-x-auto">
+                <Table className="min-w-full table-fixed">
                 <TableHeader>
                   <TableRow>
 
-                    <TableHead>
+                    <TableHead className="w-48">
                       <Button
                         type="button"
                         variant="ghost"
-                        className="h-auto p-0 font-semibold"
+                        className="h-auto p-0 font-semibold whitespace-nowrap"
                         onClick={() => handleCheckupHeaderTap("employee")}
                       >
                         {t("common.employee")} {sortIcon(checkupHeaderKey === "employee", checkupHeaderDirection)}
                       </Button>
                     </TableHead>
-                    <TableHead>
+                    <TableHead className="w-32">
                       <Button
                         type="button"
                         variant="ghost"
-                        className="h-auto p-0 font-semibold"
+                        className="h-auto p-0 font-semibold whitespace-nowrap"
                         onClick={() => handleCheckupHeaderTap("employee_number")}
                       >
                         Employee Number {sortIcon(checkupHeaderKey === "employee_number", checkupHeaderDirection)}
                       </Button>
                     </TableHead>
-                    <TableHead>
+                    <TableHead className="w-64">
                       <Button
                         type="button"
                         variant="ghost"
@@ -2099,20 +2103,20 @@ export default function Investigations() {
                         Investigation Name {sortIcon(checkupHeaderKey === "investigation_name", checkupHeaderDirection)}
                       </Button>
                     </TableHead>
-                    <TableHead>{t("common.department")}</TableHead>
-                    <TableHead>{t("common.group")}</TableHead>
-                    <TableHead>
+                    <TableHead className="w-32">{t("common.department")}</TableHead>
+                    <TableHead className="w-28">{t("common.group")}</TableHead>
+                    <TableHead className="w-36">
                       <Button
                         type="button"
                         variant="ghost"
-                        className="h-auto p-0 font-semibold"
+                        className="h-auto p-0 font-semibold whitespace-nowrap"
                         onClick={() => handleCheckupHeaderTap("appointment_date")}
                       >
                         Appointment Date {sortIcon(checkupHeaderKey === "appointment_date", checkupHeaderDirection)}
                       </Button>
                     </TableHead>
-                    <TableHead>{t("common.status")}</TableHead>
-                    <TableHead>
+                    <TableHead className="w-28">{t("common.status")}</TableHead>
+                    <TableHead className="w-48">
                       <Button
                         type="button"
                         variant="ghost"
@@ -2122,7 +2126,7 @@ export default function Investigations() {
                         Notes {sortIcon(checkupHeaderKey === "notes", checkupHeaderDirection)}
                       </Button>
                     </TableHead>
-                    <TableHead className="text-right">
+                    <TableHead className="w-28 text-right">
                       {t("common.actions")}
                     </TableHead>
                   </TableRow>
@@ -2142,14 +2146,14 @@ export default function Investigations() {
                         return (
                           <TableRow key={checkup.id}>
 
-                            <TableCell className="font-medium">
-                              {checkup.employee?.full_name || "—"}
+                            <TableCell className="font-medium max-w-[12rem]">
+                              <div className="whitespace-normal break-words">{checkup.employee?.full_name || "—"}</div>
                             </TableCell>
-                            <TableCell>
-                              {checkup.employee?.employee_number || "—"}
+                            <TableCell className="max-w-[8rem]">
+                              <div className="whitespace-normal break-words">{checkup.employee?.employee_number || "—"}</div>
                             </TableCell>
-                            <TableCell>
-                              {checkup.investigation_name || "—"}
+                            <TableCell className="max-w-[20rem]">
+                              <div className="whitespace-normal break-words">{checkup.investigation_name || "—"}</div>
                             </TableCell>
                             <TableCell>
                               {getDepartmentBadge(
@@ -2178,8 +2182,8 @@ export default function Investigations() {
                                 true
                               )}
                             </TableCell>
-                            <TableCell className="max-w-xs truncate">
-                              {checkup.notes || "—"}
+                            <TableCell className="max-w-xs">
+                              <div className="whitespace-normal break-words">{checkup.notes || "—"}</div>
                             </TableCell>
                             <TableCell className="text-right">
                               <Button
@@ -2198,7 +2202,8 @@ export default function Investigations() {
                       })
                   )}
                 </TableBody>
-              </Table>
+                </Table>
+              </div>
             )}
           </div>
         </CardContent>

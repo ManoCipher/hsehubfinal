@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuditLog } from "@/hooks/useAuditLog";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -167,6 +168,7 @@ export default function EmployeeProfile() {
   const navigate = useNavigate();
   const { companyId, user } = useAuth();
   const { hasPermission, hasDetailedPermission } = usePermissions();
+  const { logAction } = useAuditLog();
 
   const [employee, setEmployee] = useState<EmployeeData | null>(null);
   const [editMode, setEditMode] = useState<{ [key: string]: boolean }>({});
@@ -254,7 +256,9 @@ export default function EmployeeProfile() {
   // Profile field templates from settings
   const [profileFieldTemplates, setProfileFieldTemplates] = useState<any[]>([]);
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
-  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [selectedProfileTemplateId, setSelectedProfileTemplateId] = useState<string | null>(null);
+  const [templatePreviewFields, setTemplatePreviewFields] = useState<any[]>([]);
 
   // Debounce timer ref for profile field updates
   const debounceTimerRef = useRef<{ [key: string]: NodeJS.Timeout }>({});
@@ -352,6 +356,9 @@ export default function EmployeeProfile() {
       setLanguages((data as any)?.languages || "");
       setSkills((data as any)?.skills || "");
       setSalary((data as any)?.salary || "");
+      setSelectedProfileTemplateId(
+        (data as any)?.selected_profile_template_id || null
+      );
 
       // Split full_name into first and last name
       if ((data as any)?.full_name) {
@@ -727,17 +734,18 @@ export default function EmployeeProfile() {
     if (!companyId) return;
 
     try {
-      // Fetch templates
+      // Fetch templates for company
       const { data: templates, error: templatesError } = await supabase
         .from("profile_field_templates")
         .select("*")
         .eq("company_id", companyId);
 
-      // Fetch fields
+      // Fetch fields for company and group them by template
       const { data: fields, error: fieldsError } = await supabase
         .from("profile_fields")
         .select("*")
-        .eq("company_id", companyId);
+        .eq("company_id", companyId)
+        .order("display_order", { ascending: true });
 
       if (templatesError || fieldsError) {
         console.log("Error fetching profile field templates");
@@ -748,7 +756,7 @@ export default function EmployeeProfile() {
       // Group fields by template
       const formattedTemplates = (templates || []).map((t: any) => ({
         ...t,
-        fields: (fields || []).filter((f: any) => f.template_id === t.id)
+        fields: (fields || []).filter((f: any) => f.template_id === t.id),
       }));
 
       setProfileFieldTemplates(formattedTemplates);
@@ -758,53 +766,92 @@ export default function EmployeeProfile() {
     }
   };
 
+  const fetchTemplatePreviewFields = async (templateId: string) => {
+    if (!companyId || !templateId) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("profile_fields")
+        .select("*")
+        .eq("template_id", templateId)
+        .order("display_order", { ascending: true });
+
+      if (error) throw error;
+      setTemplatePreviewFields(data || []);
+    } catch (error) {
+      console.error("Error fetching template fields:", error);
+      setTemplatePreviewFields([]);
+    }
+  };
+
   const applyTemplate = async () => {
-    if (selectedTemplateIds.length === 0) {
-      toast.error("Please select at least one template to apply");
+    if (!selectedTemplateId) {
+      toast.error("Please select a template to apply");
       return;
     }
 
     try {
-      // Get all fields from selected templates
-      const selectedTemplates = profileFieldTemplates.filter(template =>
-        selectedTemplateIds.includes(template.id)
-      );
-      
-      const fieldsToAdd = selectedTemplates.flatMap(t => t.fields || []);
+      const { data: templateFields, error: templateError } = await supabase
+        .from("profile_fields")
+        .select("*")
+        .eq("template_id", selectedTemplateId)
+        .order("display_order", { ascending: true });
 
-      // Convert selected fields to profile fields format
-      const newFields = fieldsToAdd.map((field: any) => ({
-        id: `${field.field_name}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        label: field.field_label,
-        type: field.field_type === "text" ? "Single-line text" :
-          field.field_type === "number" ? "Number" :
-            field.field_type === "date" ? "Date" :
-              field.field_type === "boolean" ? "Yes/No" : "Single-line text",
-        value: field.field_type === "boolean" ? false : "",
-        is_required: field.is_required,
-        extracted_from_resume: false,
+      if (templateError) throw templateError;
+
+      if (!templateFields || templateFields.length === 0) {
+        toast.error("Selected template has no fields");
+        return;
+      }
+
+      const newFields = templateFields.map((templateField, index) => ({
+        id: `${templateField.field_name}_${Date.now()}_${index}`,
+        label: templateField.field_label,
+        type:
+          templateField.field_type === "text"
+            ? "Single-line text"
+            : templateField.field_type === "number"
+            ? "Number"
+            : templateField.field_type === "date"
+            ? "Date"
+            : templateField.field_type === "boolean"
+            ? "Yes/No"
+            : "Single-line text",
+        value: templateField.field_type === "boolean" ? false : "",
+        is_required: templateField.is_required,
+        extracted_from_resume: templateField.extracted_from_resume,
         created_at: new Date().toISOString(),
       }));
 
-      const updatedFields = [...profileFields, ...newFields];
-
       const { error } = await supabase
         .from("employees")
-        .update({ profile_fields: updatedFields })
+        .update({
+          profile_fields: newFields,
+          selected_profile_template_id: selectedTemplateId,
+        })
         .eq("id", id);
 
       if (error) throw error;
 
-      setProfileFields(updatedFields);
+      setProfileFields(newFields);
+      setSelectedProfileTemplateId(selectedTemplateId);
       setShowTemplateDialog(false);
-      setSelectedTemplateIds([]); // Reset selection
-      toast.success(`Applied ${newFields.length} profile field${newFields.length !== 1 ? 's' : ''} from template`);
+      setSelectedTemplateId(null);
+      setTemplatePreviewFields([]);
+
+      toast.success(
+        `Applied ${newFields.length} profile field${newFields.length !== 1 ? "s" : ""} from template`
+      );
+
+      const selectedTemplate = profileFieldTemplates.find(
+        (template) => template.id === selectedTemplateId
+      );
 
       await logActivity(
         "Applied profile field template",
         "create",
-        `Added ${newFields.length} fields from Settings template`,
-        { fieldsAdded: newFields.length, templates: selectedTemplates.map(t => t.name) }
+        `Replaced fields with template: ${selectedTemplate?.name || "Template"}`,
+        { fieldsAdded: newFields.length, templateId: selectedTemplateId }
       );
       await fetchActivityLogs();
     } catch (error) {
@@ -991,6 +1038,20 @@ export default function EmployeeProfile() {
         }
       );
 
+      const isNameField = field === "first_name" || field === "last_name";
+      const oldValue = isNameField
+        ? employee?.full_name
+        : employee?.[field as keyof EmployeeData];
+      const newValue = isNameField ? updateData.full_name : updateData[field];
+
+      logAction({
+        action: "update_employee",
+        targetType: "employee",
+        targetId: id,
+        targetName: updateData.full_name || employee?.full_name || "Employee",
+        details: { field, old_value: oldValue, new_value: newValue },
+      });
+
       toast.success("Updated successfully");
       setEditMode({ ...editMode, [field]: false });
       fetchEmployeeData();
@@ -1032,6 +1093,14 @@ export default function EmployeeProfile() {
         `Changed ${field} value`,
         { field, newValue: value }
       );
+
+      logAction({
+        action: "update_employee",
+        targetType: "employee",
+        targetId: id,
+        targetName: employee?.full_name || "Employee",
+        details: { field, new_value: value },
+      });
 
       toast.success("Updated successfully");
       setEditingSpecialField(null);
@@ -1118,6 +1187,17 @@ export default function EmployeeProfile() {
         "create",
         notes.substring(0, 100) + (notes.length > 100 ? "..." : "")
       );
+
+      logAction({
+        action: "add_employee_note",
+        targetType: "employee",
+        targetId: id,
+        targetName: employee?.full_name || "Employee",
+        details: {
+          note_preview: textContent.substring(0, 100),
+          visibility: visibleTo,
+        },
+      });
 
       // Auto-send in-app notifications to @mentioned users on save
       try {
@@ -1234,6 +1314,14 @@ export default function EmployeeProfile() {
         "delete",
         noteContent.substring(0, 100) + (noteContent.length > 100 ? "..." : "")
       );
+
+      logAction({
+        action: "delete_employee_note",
+        targetType: "employee",
+        targetId: id,
+        targetName: employee?.full_name || "Employee",
+        details: { note_id: noteId, note_preview: noteContent.substring(0, 100) },
+      });
 
       toast.success("Note deleted successfully");
       fetchEmployeeData();
@@ -1813,6 +1901,14 @@ export default function EmployeeProfile() {
         { status: isActive ? "active" : "inactive" }
       );
 
+      logAction({
+        action: "update_employee",
+        targetType: "employee",
+        targetId: id,
+        targetName: employee?.full_name || "Employee",
+        details: { field: "is_active", new_value: isActive },
+      });
+
       toast.success(`Employee ${isActive ? "activated" : "deactivated"}`);
       fetchEmployeeData();
       fetchActivityLogs();
@@ -1867,7 +1963,9 @@ export default function EmployeeProfile() {
       if (uploadError) throw uploadError;
 
       // Save document record
-      const { error: dbError } = await supabase.from("documents").insert({
+      const { data: createdDoc, error: dbError } = await supabase
+        .from("documents")
+        .insert({
         company_id: companyId,
         title: file.name.replace(/\.[^/.]+$/, ""),
         description: `Document for employee ${employee?.full_name || ""} (${employee?.employee_number || ""
@@ -1880,7 +1978,9 @@ export default function EmployeeProfile() {
         is_public: false,
         uploaded_by: user.id,
         tags: [id, employee?.employee_number || ""].filter(Boolean),
-      } as any);
+      } as any)
+        .select()
+        .single();
 
       if (dbError) throw dbError;
 
@@ -1890,6 +1990,19 @@ export default function EmployeeProfile() {
         `Uploaded file: ${file.name}`,
         { fileName: file.name, fileSize: file.size, mimeType: file.type }
       );
+
+      logAction({
+        action: "upload_document",
+        targetType: "document",
+        targetId: createdDoc?.id || null,
+        targetName: file.name,
+        details: {
+          file_name: file.name,
+          file_size: file.size,
+          employee_id: id,
+          employee_name: employee?.full_name,
+        },
+      });
 
       toast.success("Document uploaded successfully");
       fetchDocuments();
@@ -2884,207 +2997,211 @@ export default function EmployeeProfile() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {/* Special Fields: Languages, Skills, Salary */}
-                      {/* Languages */}
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          {editingSpecialFieldLabel === "languages" ? (
-                            <Input
-                              value={languagesLabel}
-                              onChange={(e) => setLanguagesLabel(e.target.value)}
-                              onBlur={() => setEditingSpecialFieldLabel(null)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") setEditingSpecialFieldLabel(null);
-                              }}
-                              className="text-sm font-medium h-7 w-48"
-                              autoFocus
-                            />
-                          ) : (
-                            <Label
-                              className="text-sm font-medium cursor-pointer hover:text-primary"
-                              onClick={() => setEditingSpecialFieldLabel("languages")}
-                            >
-                              {languagesLabel}
-                            </Label>
-                          )}
-                          <Pencil
-                            className="w-3 h-3 text-muted-foreground cursor-pointer hover:text-primary"
-                            onClick={() => setEditingSpecialFieldLabel("languages")}
-                          />
-                        </div>
-                        {editingSpecialField === "languages" ? (
-                          <div className="space-y-2">
-                            <Textarea
-                              value={languages}
-                              onChange={(e) => setLanguages(e.target.value)}
-                              placeholder="Enter languages (e.g., English, German, Spanish)"
-                              className="text-sm min-h-[80px]"
-                              autoFocus
-                            />
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                onClick={() =>
-                                  handleSpecialFieldSave("languages")
-                                }
-                              >
-                                <Save className="w-3 h-3 mr-1" />
-                                Save
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  handleSpecialFieldCancel("languages")
-                                }
-                              >
-                                <X className="w-3 h-3 mr-1" />
-                                Cancel
-                              </Button>
+                      {!selectedProfileTemplateId && (
+                        <>
+                          {/* Special Fields: Languages, Skills, Salary */}
+                          {/* Languages */}
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              {editingSpecialFieldLabel === "languages" ? (
+                                <Input
+                                  value={languagesLabel}
+                                  onChange={(e) => setLanguagesLabel(e.target.value)}
+                                  onBlur={() => setEditingSpecialFieldLabel(null)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") setEditingSpecialFieldLabel(null);
+                                  }}
+                                  className="text-sm font-medium h-7 w-48"
+                                  autoFocus
+                                />
+                              ) : (
+                                <Label
+                                  className="text-sm font-medium cursor-pointer hover:text-primary"
+                                  onClick={() => setEditingSpecialFieldLabel("languages")}
+                                >
+                                  {languagesLabel}
+                                </Label>
+                              )}
+                              <Pencil
+                                className="w-3 h-3 text-muted-foreground cursor-pointer hover:text-primary"
+                                onClick={() => setEditingSpecialFieldLabel("languages")}
+                              />
                             </div>
+                            {editingSpecialField === "languages" ? (
+                              <div className="space-y-2">
+                                <Textarea
+                                  value={languages}
+                                  onChange={(e) => setLanguages(e.target.value)}
+                                  placeholder="Enter languages (e.g., English, German, Spanish)"
+                                  className="text-sm min-h-[80px]"
+                                  autoFocus
+                                />
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    onClick={() =>
+                                      handleSpecialFieldSave("languages")
+                                    }
+                                  >
+                                    <Save className="w-3 h-3 mr-1" />
+                                    Save
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      handleSpecialFieldCancel("languages")
+                                    }
+                                  >
+                                    <X className="w-3 h-3 mr-1" />
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <p
+                                className="text-sm text-muted-foreground whitespace-pre-wrap cursor-pointer hover:bg-muted/50 p-2 rounded transition-colors"
+                                onClick={() => setEditingSpecialField("languages")}
+                              >
+                                {languages || "No languages specified"}
+                              </p>
+                            )}
                           </div>
-                        ) : (
-                          <p
-                            className="text-sm text-muted-foreground whitespace-pre-wrap cursor-pointer hover:bg-muted/50 p-2 rounded transition-colors"
-                            onClick={() => setEditingSpecialField("languages")}
-                          >
-                            {languages || "No languages specified"}
-                          </p>
-                        )}
-                      </div>
 
-                      {/* Skills */}
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          {editingSpecialFieldLabel === "skills" ? (
-                            <Input
-                              value={skillsLabel}
-                              onChange={(e) => setSkillsLabel(e.target.value)}
-                              onBlur={() => setEditingSpecialFieldLabel(null)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") setEditingSpecialFieldLabel(null);
-                              }}
-                              className="text-sm font-medium h-7 w-48"
-                              autoFocus
-                            />
-                          ) : (
-                            <Label
-                              className="text-sm font-medium cursor-pointer hover:text-primary"
-                              onClick={() => setEditingSpecialFieldLabel("skills")}
-                            >
-                              {skillsLabel}
-                            </Label>
-                          )}
-                          <Pencil
-                            className="w-3 h-3 text-muted-foreground cursor-pointer hover:text-primary"
-                            onClick={() => setEditingSpecialFieldLabel("skills")}
-                          />
-                        </div>
-                        {editingSpecialField === "skills" ? (
-                          <div className="space-y-2">
-                            <Textarea
-                              value={skills}
-                              onChange={(e) => setSkills(e.target.value)}
-                              placeholder="Enter skills (e.g., Project Management, Safety Training)"
-                              className="text-sm min-h-[80px]"
-                              autoFocus
-                            />
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                onClick={() => handleSpecialFieldSave("skills")}
-                              >
-                                <Save className="w-3 h-3 mr-1" />
-                                Save
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  handleSpecialFieldCancel("skills")
-                                }
-                              >
-                                <X className="w-3 h-3 mr-1" />
-                                Cancel
-                              </Button>
+                          {/* Skills */}
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              {editingSpecialFieldLabel === "skills" ? (
+                                <Input
+                                  value={skillsLabel}
+                                  onChange={(e) => setSkillsLabel(e.target.value)}
+                                  onBlur={() => setEditingSpecialFieldLabel(null)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") setEditingSpecialFieldLabel(null);
+                                  }}
+                                  className="text-sm font-medium h-7 w-48"
+                                  autoFocus
+                                />
+                              ) : (
+                                <Label
+                                  className="text-sm font-medium cursor-pointer hover:text-primary"
+                                  onClick={() => setEditingSpecialFieldLabel("skills")}
+                                >
+                                  {skillsLabel}
+                                </Label>
+                              )}
+                              <Pencil
+                                className="w-3 h-3 text-muted-foreground cursor-pointer hover:text-primary"
+                                onClick={() => setEditingSpecialFieldLabel("skills")}
+                              />
                             </div>
+                            {editingSpecialField === "skills" ? (
+                              <div className="space-y-2">
+                                <Textarea
+                                  value={skills}
+                                  onChange={(e) => setSkills(e.target.value)}
+                                  placeholder="Enter skills (e.g., Project Management, Safety Training)"
+                                  className="text-sm min-h-[80px]"
+                                  autoFocus
+                                />
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleSpecialFieldSave("skills")}
+                                  >
+                                    <Save className="w-3 h-3 mr-1" />
+                                    Save
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      handleSpecialFieldCancel("skills")
+                                    }
+                                  >
+                                    <X className="w-3 h-3 mr-1" />
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <p
+                                className="text-sm text-muted-foreground whitespace-pre-wrap cursor-pointer hover:bg-muted/50 p-2 rounded transition-colors"
+                                onClick={() => setEditingSpecialField("skills")}
+                              >
+                                {skills || "No skills specified"}
+                              </p>
+                            )}
                           </div>
-                        ) : (
-                          <p
-                            className="text-sm text-muted-foreground whitespace-pre-wrap cursor-pointer hover:bg-muted/50 p-2 rounded transition-colors"
-                            onClick={() => setEditingSpecialField("skills")}
-                          >
-                            {skills || "No skills specified"}
-                          </p>
-                        )}
-                      </div>
 
-                      {/* Salary */}
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          {editingSpecialFieldLabel === "salary" ? (
-                            <Input
-                              value={salaryLabel}
-                              onChange={(e) => setSalaryLabel(e.target.value)}
-                              onBlur={() => setEditingSpecialFieldLabel(null)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") setEditingSpecialFieldLabel(null);
-                              }}
-                              className="text-sm font-medium h-7 w-48"
-                              autoFocus
-                            />
-                          ) : (
-                            <Label
-                              className="text-sm font-medium cursor-pointer hover:text-primary"
-                              onClick={() => setEditingSpecialFieldLabel("salary")}
-                            >
-                              {salaryLabel}
-                            </Label>
-                          )}
-                          <Pencil
-                            className="w-3 h-3 text-muted-foreground cursor-pointer hover:text-primary"
-                            onClick={() => setEditingSpecialFieldLabel("salary")}
-                          />
-                        </div>
-                        {editingSpecialField === "salary" ? (
-                          <div className="space-y-2">
-                            <Input
-                              type="text"
-                              value={salary}
-                              onChange={(e) => setSalary(e.target.value)}
-                              placeholder="Enter salary (e.g., €50,000 per year)"
-                              className="text-sm"
-                              autoFocus
-                            />
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                onClick={() => handleSpecialFieldSave("salary")}
-                              >
-                                <Save className="w-3 h-3 mr-1" />
-                                Save
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  handleSpecialFieldCancel("salary")
-                                }
-                              >
-                                <X className="w-3 h-3 mr-1" />
-                                Cancel
-                              </Button>
+                          {/* Salary */}
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              {editingSpecialFieldLabel === "salary" ? (
+                                <Input
+                                  value={salaryLabel}
+                                  onChange={(e) => setSalaryLabel(e.target.value)}
+                                  onBlur={() => setEditingSpecialFieldLabel(null)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") setEditingSpecialFieldLabel(null);
+                                  }}
+                                  className="text-sm font-medium h-7 w-48"
+                                  autoFocus
+                                />
+                              ) : (
+                                <Label
+                                  className="text-sm font-medium cursor-pointer hover:text-primary"
+                                  onClick={() => setEditingSpecialFieldLabel("salary")}
+                                >
+                                  {salaryLabel}
+                                </Label>
+                              )}
+                              <Pencil
+                                className="w-3 h-3 text-muted-foreground cursor-pointer hover:text-primary"
+                                onClick={() => setEditingSpecialFieldLabel("salary")}
+                              />
                             </div>
+                            {editingSpecialField === "salary" ? (
+                              <div className="space-y-2">
+                                <Input
+                                  type="text"
+                                  value={salary}
+                                  onChange={(e) => setSalary(e.target.value)}
+                                  placeholder="Enter salary (e.g., EUR 50,000 per year)"
+                                  className="text-sm"
+                                  autoFocus
+                                />
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleSpecialFieldSave("salary")}
+                                  >
+                                    <Save className="w-3 h-3 mr-1" />
+                                    Save
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                      handleSpecialFieldCancel("salary")
+                                    }
+                                  >
+                                    <X className="w-3 h-3 mr-1" />
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <p
+                                className="text-sm text-muted-foreground cursor-pointer hover:bg-muted/50 p-2 rounded transition-colors"
+                                onClick={() => setEditingSpecialField("salary")}
+                              >
+                                {salary || "No salary specified"}
+                              </p>
+                            )}
                           </div>
-                        ) : (
-                          <p
-                            className="text-sm text-muted-foreground cursor-pointer hover:bg-muted/50 p-2 rounded transition-colors"
-                            onClick={() => setEditingSpecialField("salary")}
-                          >
-                            {salary || "No salary specified"}
-                          </p>
-                        )}
-                      </div>
+                        </>
+                      )}
 
                       {/* Custom Profile Fields - Same style as special fields */}
                       {profileFields.map((field) => (
@@ -3166,7 +3283,7 @@ export default function EmployeeProfile() {
                                       {customFieldEditValue ? (
                                         format(new Date(customFieldEditValue), "PPP")
                                       ) : (
-                                        <span>Pick a date</span>
+                                        <span>{t("common.pickDate")}</span>
                                       )}
                                     </Button>
                                   </PopoverTrigger>
@@ -3279,7 +3396,14 @@ export default function EmployeeProfile() {
                 {/* Use Template Dialog */}
                 <Dialog open={showTemplateDialog} onOpenChange={(open) => {
                   setShowTemplateDialog(open);
-                  if (!open) setSelectedTemplateIds([]); // Reset on close
+                  if (open && selectedProfileTemplateId) {
+                    setSelectedTemplateId(selectedProfileTemplateId);
+                    fetchTemplatePreviewFields(selectedProfileTemplateId);
+                  }
+                  if (!open) {
+                    setSelectedTemplateId(null);
+                    setTemplatePreviewFields([]);
+                  }
                 }}>
                   <DialogContent className="sm:max-w-[600px]">
                     <DialogHeader>
@@ -3296,53 +3420,22 @@ export default function EmployeeProfile() {
                           <p className="text-sm">Go to Settings → Profile Fields to create templates</p>
                         </div>
                       ) : (
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <div className="text-sm text-muted-foreground">
-                              {selectedTemplateIds.length} of {profileFieldTemplates.length} selected
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-xs h-7"
-                              onClick={() => {
-                                if (selectedTemplateIds.length === profileFieldTemplates.length) {
-                                  setSelectedTemplateIds([]);
-                                } else {
-                                  setSelectedTemplateIds(profileFieldTemplates.map(t => t.id));
-                                }
-                              }}
-                            >
-                              {selectedTemplateIds.length === profileFieldTemplates.length ? 'Deselect All' : 'Select All'}
-                            </Button>
-                          </div>
-                          <div className="max-h-[300px] overflow-y-auto space-y-2 border rounded-lg p-3 bg-muted/20">
-                            {profileFieldTemplates.map((template, index) => {
-                              const isSelected = selectedTemplateIds.includes(template.id);
+                        <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4">
+                          <div className="space-y-2">
+                            {profileFieldTemplates.map((template) => {
+                              const isSelected = selectedTemplateId === template.id;
                               return (
                                 <div
                                   key={template.id}
                                   className={`flex items-center gap-3 p-2 border rounded text-sm cursor-pointer transition-colors ${isSelected
-                                    ? 'bg-primary/10 border-primary'
-                                    : 'bg-background hover:bg-muted/50'
+                                    ? "bg-primary/10 border-primary"
+                                    : "bg-background hover:bg-muted/50"
                                     }`}
                                   onClick={() => {
-                                    setSelectedTemplateIds(prev =>
-                                      prev.includes(template.id)
-                                        ? prev.filter(id => id !== template.id)
-                                        : [...prev, template.id]
-                                    );
+                                    setSelectedTemplateId(template.id);
+                                    fetchTemplatePreviewFields(template.id);
                                   }}
                                 >
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={() => { }}
-                                    className="w-4 h-4 cursor-pointer"
-                                  />
-                                  <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-medium">
-                                    {index + 1}
-                                  </div>
                                   <div className="flex-1">
                                     <div className="font-medium">{template.name}</div>
                                     <div className="text-xs text-muted-foreground flex items-center gap-2 mt-1">
@@ -3353,6 +3446,31 @@ export default function EmployeeProfile() {
                               );
                             })}
                           </div>
+                          <div className="max-h-[300px] overflow-y-auto space-y-2 border rounded-lg p-3 bg-muted/20">
+                            {selectedTemplateId ? (
+                              templatePreviewFields.length > 0 ? (
+                                templatePreviewFields.map((field) => (
+                                  <div
+                                    key={field.id}
+                                    className="flex items-center justify-between text-sm border-b border-muted pb-2 last:border-b-0"
+                                  >
+                                    <div className="font-medium">{field.field_label}</div>
+                                    <div className="text-xs text-muted-foreground capitalize">
+                                      {field.field_type}
+                                    </div>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="text-sm text-muted-foreground">
+                                  No fields in this template yet.
+                                </div>
+                              )
+                            ) : (
+                              <div className="text-sm text-muted-foreground">
+                                Select a template to preview its fields.
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -3361,17 +3479,18 @@ export default function EmployeeProfile() {
                         variant="outline"
                         onClick={() => {
                           setShowTemplateDialog(false);
-                          setSelectedTemplateIds([]);
+                          setSelectedTemplateId(null);
+                          setTemplatePreviewFields([]);
                         }}
                       >
                         Cancel
                       </Button>
                       <Button
                         onClick={applyTemplate}
-                        disabled={selectedTemplateIds.length === 0}
+                        disabled={!selectedTemplateId}
                       >
                         <CheckCircle className="w-4 h-4 mr-2" />
-                        Apply {selectedTemplateIds.length > 0 ? `(${selectedTemplateIds.length})` : 'Template'}
+                        Apply Template
                       </Button>
                     </DialogFooter>
                   </DialogContent>
@@ -4607,7 +4726,7 @@ export default function EmployeeProfile() {
                             {checkupFormData.appointment_date ? (
                               format(new Date(checkupFormData.appointment_date), "PPP")
                             ) : (
-                              <span>Pick a date</span>
+                              <span>{t("common.pickDate")}</span>
                             )}
                           </Button>
                         </PopoverTrigger>
@@ -4639,7 +4758,7 @@ export default function EmployeeProfile() {
                             {checkupFormData.due_date ? (
                               format(new Date(checkupFormData.due_date), "PPP")
                             ) : (
-                              <span>Pick a date</span>
+                              <span>{t("common.pickDate")}</span>
                             )}
                           </Button>
                         </PopoverTrigger>

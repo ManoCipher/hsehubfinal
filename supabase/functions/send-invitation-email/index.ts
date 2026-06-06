@@ -1,6 +1,8 @@
 // @ts-nocheck - This is a Deno Edge Function with URL imports
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
+export const config = { auth: false };
+
 // Use Brevo (Sendinblue) API instead of Resend
 const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY");
 

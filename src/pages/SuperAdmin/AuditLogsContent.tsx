@@ -126,6 +126,11 @@ const WARNING_ACTIONS = [
     "cancel_subscription", "invite_team_member", "generate_api_token"
 ];
 
+interface CompanyOption {
+    id: string;
+    name: string;
+}
+
 export default function AuditLogsContent() {
     const { toast } = useToast();
 
@@ -137,6 +142,9 @@ export default function AuditLogsContent() {
     const [dateRange, setDateRange] = useState("7days");
     const [detailLog, setDetailLog] = useState<AuditLog | null>(null);
     const [detailOpen, setDetailOpen] = useState(false);
+    const [companyFilter, setCompanyFilter] = useState("all");
+    const [actorFilter, setActorFilter] = useState("");
+    const [companies, setCompanies] = useState<CompanyOption[]>([]);
 
     const [stats, setStats] = useState({
         totalLogs: 0,
@@ -148,7 +156,18 @@ export default function AuditLogsContent() {
     useEffect(() => {
         fetchLogs();
         fetchStats();
+        fetchCompanies();
     }, [dateRange]);
+
+    const actionOptions = useMemo(
+        () => Array.from(new Set(logs.map((log) => log.action_type))).sort(),
+        [logs]
+    );
+
+    const targetOptions = useMemo(
+        () => Array.from(new Set(logs.map((log) => log.target_type))).sort(),
+        [logs]
+    );
 
     const fetchLogs = async () => {
         try {
@@ -221,6 +240,20 @@ export default function AuditLogsContent() {
             });
         } catch (error) {
             console.error("Error fetching stats:", error);
+        }
+    };
+
+    const fetchCompanies = async () => {
+        try {
+            const { data, error } = await supabase
+                .from("companies")
+                .select("id, name")
+                .order("name", { ascending: true });
+
+            if (error) throw error;
+            setCompanies((data || []) as CompanyOption[]);
+        } catch (error) {
+            console.error("Error fetching companies:", error);
         }
     };
 
@@ -337,9 +370,16 @@ export default function AuditLogsContent() {
             const matchesTarget =
                 targetFilter === "all" || log.target_type === targetFilter;
 
-            return matchesSearch && matchesAction && matchesTarget;
+            const matchesCompany =
+                companyFilter === "all" || log.company_id === companyFilter;
+
+            const matchesActor =
+                !actorFilter ||
+                (log.actor_email || "").toLowerCase().includes(actorFilter.toLowerCase());
+
+            return matchesSearch && matchesAction && matchesTarget && matchesCompany && matchesActor;
         });
-    }, [logs, searchQuery, actionFilter, targetFilter]);
+    }, [logs, searchQuery, actionFilter, targetFilter, companyFilter, actorFilter]);
 
     const getActionBadgeVariant = (action: string) => {
         if (CRITICAL_ACTIONS.includes(action)) return "destructive";
@@ -445,8 +485,8 @@ export default function AuditLogsContent() {
                 </Select>
             </div>
 
-            {/* Target type filter + actions row */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+             {/* Target type filter + actions row */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-wrap">
                 <Select value={targetFilter} onValueChange={setTargetFilter}>
                     <SelectTrigger className="w-full sm:w-44">
                         <SelectValue placeholder="All Target Types" />
@@ -464,6 +504,27 @@ export default function AuditLogsContent() {
                         <SelectItem value="system">System</SelectItem>
                     </SelectContent>
                 </Select>
+
+                <Select value={companyFilter} onValueChange={setCompanyFilter}>
+                    <SelectTrigger className="w-full sm:w-44">
+                        <SelectValue placeholder="All Companies" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All Companies</SelectItem>
+                        {companies.map((company) => (
+                            <SelectItem key={company.id} value={company.id}>
+                                {company.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+
+                <Input
+                    placeholder="Filter by actor email"
+                    value={actorFilter}
+                    onChange={(e) => setActorFilter(e.target.value)}
+                    className="w-full sm:w-52"
+                />
 
                 <div className="flex gap-2 ml-auto">
                     <Button onClick={fetchLogs} variant="outline" size="sm" disabled={loadingData}>
